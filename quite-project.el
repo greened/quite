@@ -27,8 +27,6 @@
 
 ;;; Code:
 
-;;; Custom variables
-
 (require 'quite)
 
 ;;;###autoload
