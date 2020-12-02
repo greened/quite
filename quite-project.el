@@ -47,8 +47,8 @@
   :group 'quite-project)
 
 (defun quite-project--file-exists-p (project-root key-files)
-  "See if one of KEY-FILES exists under ROOT and return the full
-path to it, nil otherwise."
+  "See if one of KEY-FILES exists under PROJECT-ROOT and return
+the full path to it, nil otherwise."
   (catch 'found
     (dolist (key-file key-files)
       (let ((root-key-file (concat project-root "/" key-file)))
@@ -58,17 +58,19 @@ path to it, nil otherwise."
 (defun quite-project--path-for-buffer (project-dir key-files)
   "Return the project root source path for the current buffer, or
 nil if the buffer isn't associated with a project source file.
-KEY-FILES is a list of files to look for in PROJECT_DIR."
+KEY-FILES is a list of files to look for in PROJECT-DIR.
+Intermediate directories between PROJECT-DIR and KEY-FILES are
+allowed."
   (let ((buffer-file (buffer-file-name)))
     (if buffer-file
-	(let ((root (cond
-		     ((string-match (format "\\(.*/%s\\)/" project-dir)
-				    buffer-file)
-		      (match-string-no-properties 1 buffer-file))
-		     (t nil))))
-	  (if (and root (quite-project--file-exists-p root key-files))
-	      root
-	    nil))
+        (if (string-match (format "\\(.*/%s\\)/" project-dir)
+                          buffer-file)
+            (catch 'found
+              (dolist (key-file key-files)
+                (let ((found-file (locate-dominating-file buffer-file key-file)))
+                  (when found-file
+                    (throw 'found (file-name-directory found-file))))))
+          nil)
       nil)))
 
 (defvar quite-project--root-list nil)
@@ -95,27 +97,30 @@ prompt otherwise.  Ensure that one of KEY-FILES is in the
 returned root.  The returned ROOT is a path on the remote HOST,
 without the remote prefix."
   (let ((the-root
-	 (let ((remote-prefix
-		;; FIXME: Don't hard-code method.
-		(when (not (string-equal host (system-name)))
-		    (concat "/ssh:" host ":"))))
-	   (catch 'found
-	     (dolist (root root-list)
-	       (dolist (file key-files)
-		 (let* ((try-root (concat root "/" project-dir))
-			(remote-try-root (concat remote-prefix try-root)))
-		   (when (file-exists-p (concat remote-try-root "/" file))
-		     (throw 'found try-root)))))
-	     ;; Did not find a project in the given remote, prompt for one.
-	     (let* ((root (quite-project--prompt-for-root))
-		    (try-root (concat root "/" project-dir))
-		    (remote-try-root (concat remote-prefix try-root)))
-	       (dolist (file key-files)
-		 (when (file-exists-p (concat remote-try-root "/" file))
-		   (throw 'found try-root))))))))
+         (quite-project--path-for-buffer project-dir key-files)))
     (if (not the-root)
-	(error (format "%s does not exist in %s with %s on %s"
-		       project-dir root-list key-files host))
+        (let ((remote-prefix
+               ;; FIXME: Don't hard-code method.
+               (when (not (string-equal host (system-name)))
+                 (concat "/ssh:" host ":"))))
+          (let ((found-root
+                 (catch 'found
+                   (dolist (root root-list)
+                     (dolist (file key-files)
+                       (let* ((try-root (concat root "/" project-dir))
+                              (remote-try-root (concat remote-prefix try-root)))
+                         (when (file-exists-p (concat remote-try-root "/" file))
+                           (throw 'found try-root)))))
+                   ;; Did not find a project in the given remote, prompt for one.
+                   (let* ((root (quite-project--prompt-for-root))
+                          (try-root (concat root "/" project-dir))
+                          (remote-try-root (concat remote-prefix try-root)))
+                     (dolist (file key-files)
+                       (when (file-exists-p (concat remote-try-root "/" file))
+                         (throw 'found try-root)))))))
+            (if (not found-root)
+                (error (format "%s does not exist in %s with %s on %s"
+                               project-dir root-list key-files host)))))
       the-root)))
 
 (defun quite-project-parse-descriptor (descriptor)
