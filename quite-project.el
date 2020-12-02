@@ -1,6 +1,6 @@
 ;;; quite-project.el ---  QUIck Transparent Execution.  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2019  David Greene
+;; Copyright (C) 2019-2020  David A. Greene
 
 ;; Author: David Greene <greened@obbligato.org>
 ;; Keywords: processes, tools
