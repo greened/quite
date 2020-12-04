@@ -37,6 +37,9 @@
 ;; function.
 
 ;;; Code:
+(require 'quite-buffer)
+(require 'quite-project)
+(require 'quite-remote)
 
 ;;; Custom variables
 
@@ -126,6 +129,25 @@ using a list of descriptors configured in
 `quite-descriptors'."
   (interactive "P")
   (quite-dispatch parg quite-descriptors))
+
+(defun quite-run-project-remote (func descriptor &rest args)
+  "Run FUNC passing args from project DESCRIPTOR and ARGS on the
+remote associated with the current buffer.  FUNC is expected to
+take host, project root a possibly-nil subdir and buffer
+arguments before ARGS."
+  (let* ((project-config (quite-project-parse-descriptor descriptor))
+	 (project-dir (nth 0 project-config))
+	 (root-list (nth 1 project-config))
+	 (key-files-list (nth 2 project-config))
+	 (host (quite-remote-host-for-current-buffer
+		t 'quite-remote-localhost))
+	 (root (quite-project-find-project
+		project-dir host root-list key-files-list))
+	 (buffer (quite-project-find-key-files-buffer
+		  (quite-remote-create-remote-path host root) key-files-list))
+         (subdir (extract-subdir root project-dir)))
+    (apply func host root subdir buffer args)))
+
 
 (provide 'quite)
 
