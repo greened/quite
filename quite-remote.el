@@ -48,6 +48,14 @@
   "Prompt the user for a host, with completion."
   (quite--read-string "Host: " 'quite-remote--host-list))
 
+(defun quite-remote--strip-host (path)
+  "Remove the method/host prefix from PATH if present."
+  ;; FIXME: Don't hard-code the method.
+  (replace-regexp-in-string
+   "^\\(/ssh:\\([[:alnum:]]+@\\)?[[:alnum:]]+:\\)"
+   ""
+   path))
+
 ;;; User-facing utlities
 
 (defun quite-remote-create-remote-path (host path)

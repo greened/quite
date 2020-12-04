@@ -38,7 +38,7 @@ re-use it, otherwise run in the context of BUFFER.  FUNC may
 create a new buffer in which case the buffer will be renamed to
 BUFFER-NAME.  FUNC should return any new buffer created,
 otherwise nil."
-  (message (format "Running %s in buffer %s with name %s" func buffer buffer-name))
+  ;;(message (format "Running %s in buffer %s with name %s" func buffer buffer-name))
   (let ((existing-buffer (get-buffer buffer-name)))
     (if existing-buffer
 	(progn
@@ -70,7 +70,6 @@ generating function will be substituted.  For example:
 							    value)))
 				       (list char mapped-value)))
 				   spec-alist)))
-    (message (format "mapped-spec-alist: %s" mapped-spec-alist))
     (format-spec string mapped-spec-alist)))
 
 (provide 'quite-buffer)

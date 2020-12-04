@@ -121,7 +121,7 @@ without the remote prefix."
             (if (not found-root)
                 (error (format "%s does not exist in %s with %s on %s"
                                project-dir root-list key-files host)))))
-      the-root)))
+      (quite-remote--strip-host the-root))))
 
 (defun quite-project-parse-descriptor (descriptor)
   "Parse DESCRIPTOR, returning a list (project-dir root-list
