@@ -315,7 +315,6 @@ re-use it, otherwise run in the context of BUFFER.  FUNC may
 create a new buffer in which case the buffer will be renamed to
 BUFFER-NAME.  FUNC should return any new buffer created,
 otherwise nil."
-  (message "Running %s in buffer %s with name %s" func buffer buffer-name)
   (let ((existing-buffer (get-buffer buffer-name)))
     (if existing-buffer
 	(progn
@@ -338,7 +337,6 @@ signature:
 
 (func host rootdir subdir buffer tag)
 "
-  (message "quite--generate-buffer-action command-func: %s buffer-name-func: %s" command-func buffer-name-func)
   (lexical-let ((loc-command-func command-func)
                 (loc-name-func buffer-name-func))
     (lambda (host root subdir buffer tag)
@@ -405,11 +403,9 @@ for use as a :default-host-func when specifying
   that dispatches to the appropriate function when passed a
   prefix argument. TAG-FUNCTION-ALIST assoicates a tag with a
   function to call, passing that tag as its last argument."
-  (message "quite-generate-dispatcher project-descriptor: %s tag-function-alist: %s" project-descriptor tag-function-alist)
   (lexical-let ((dispatch-list
                  (quite--generate-dispatch-table
                   project-descriptor tag-function-alist)))
-    (message "Dispatch table: %s" dispatch-list)
     (lambda (parg)
       (interactive "P")
       (save-excursion
