@@ -39,10 +39,6 @@
 ;; function.
 
 ;;; Code:
-(require 'quite-buffer)
-(require 'quite-project)
-(require 'quite-remote)
-
 ;;; Custom variables
 
 (defgroup quite nil
