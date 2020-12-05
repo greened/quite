@@ -340,13 +340,20 @@ signature:
   (lexical-let ((loc-command-func command-func)
                 (loc-name-func buffer-name-func))
     (lambda (host root subdir buffer tag)
-      (quite--run-in-buffer-context
-       ;; Function to run
-       (funcall loc-command-func host root subdir buffer tag)
-       ;; Buffer to run in
-       buffer
-       ;; Buffer name
-       (funcall loc-name-func host root subdir buffer tag)))))
+      ;; Needed?
+      (lexical-let ((loc-host host)
+                    (loc-root root)
+                    (loc-subdir subdir)
+                    (loc-buffer buffer)
+                    (loc-tag tag))
+        (quite--run-in-buffer-context
+         ;; Function to run
+         (lambda ()
+           (funcall loc-command-func host root subdir buffer tag))
+         ;; Buffer to run in
+         buffer
+         ;; Buffer name
+         (funcall loc-name-func host root subdir buffer tag))))))
 
 (defun quite--buffer-format (string spec-alist)
   "Format STRING using SPEC-ALIST.
