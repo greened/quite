@@ -32,46 +32,6 @@
 
 ;;; User-facing utilities
 
-(defun quite-buffer-run-in-buffer-context (func buffer buffer-name)
-  "Invoke FUNC within a buffer named BUFFER-NAME.  If BUFFER-NAME exists,
-re-use it, otherwise run in the context of BUFFER.  FUNC may
-create a new buffer in which case the buffer will be renamed to
-BUFFER-NAME.  FUNC should return any new buffer created,
-otherwise nil."
-  ;;(message (format "Running %s in buffer %s with name %s" func buffer buffer-name))
-  (let ((existing-buffer (get-buffer buffer-name)))
-    (if existing-buffer
-	(progn
-	  (set-buffer existing-buffer)
-	  (funcall func))
-      ;; Use the provided buffer.
-      (progn
-
-	(set-buffer buffer)
-	(let ((new-buffer (funcall func)))
-	  (if new-buffer
-	      (set-buffer new-buffer)))
-	(rename-buffer buffer-name)))))
-
-(defun quite-buffer-format (string spec-alist)
-  "Format STRING using SPEC-ALIST.
-SPEC-ALIST associates a string placeholder with a string or a
-function that generates a string.  Wherever the placeholder is
-used in STRING, the mapped string or value created by the mapped
-generating function will be substituted.  For example:
-
-(quite-buffer-format \"*%h-compile*\" ((?H \"my.host.com\") (?h \"my\") (?p 'buffer-file-name)))"
-  (message (format "spec-alist: %s" spec-alist))
-  (let ((mapped-spec-alist (mapcar (lambda (spec)
-				     (let* ((char (nth 0 spec))
-					    (value (nth 1 spec))
-					    (mapped-value (if (functionp value)
-							      (funcall functionp)
-							    value)))
-				       (list char mapped-value)))
-				   spec-alist)))
-    (format-spec string mapped-spec-alist)))
-
 (provide 'quite-buffer)
 
 ;;; quite-buffer.el ends here

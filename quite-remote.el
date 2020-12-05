@@ -42,47 +42,6 @@
 
 ;;; Implementation
 
-(defvar quite-remote--host-list nil)
-
-(defun quite-remote--prompt-for-host ()
-  "Prompt the user for a host, with completion."
-  (quite--read-string "Host: " 'quite-remote--host-list))
-
-(defun quite-remote--strip-host (path)
-  "Remove the method/host prefix from PATH if present."
-  ;; FIXME: Don't hard-code the method.
-  (replace-regexp-in-string
-   "^\\(/ssh:\\([[:alnum:]]+@\\)?[[:alnum:]]+:\\)"
-   ""
-   path))
-
-;;; User-facing utlities
-
-(defun quite-remote-create-remote-path (host path)
-  "Take local path PATH and create a remote path for it on HOST."
-  ;; FIXME: Don't hard-code the method.
-  (concat "/ssh:" host ":" path))
-
-(defun quite-remote-host-for-current-buffer (prompt default-host-func)
-  "Return the host if the current buffer is associated with a
-remote file, the local host if the current buffer is associated
-with a local file, prompt for user input otherwise."
-  (let ((buffer-file (buffer-file-name)))
-    (if buffer-file
-	(let ((host (file-remote-p buffer-file 'host)))
-	  (if host
-	      host
-	    (system-name)))
-      (if prompt
-	  (quite-remote--prompt-for-host)
-	(funcall default-host-func (current-buffer))))))
-
-(defun quite-remote-localhost (buffer)
-  "Return the local host name.  This is a convenience function
-for use as a :default-host-func when specifying
-`quite-remote-descriptors'"
-  (system-name))
-
 (provide 'quite-remote)
 
 ;;; quite-remote.el ends here
