@@ -4,6 +4,7 @@
 
 ;; Author: David Greene <greened@obbligato.org>
 ;; Keywords: processes, tools
+;; Version: 0.0.1
 ;; URL: http://github.com/greened/quite
 
 ;; This program is free software; you can redistribute it and/or modify
