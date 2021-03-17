@@ -281,7 +281,7 @@ project descriptor entires and the oath of the current buffer."
 (defun quite--generate-invoker (descriptor func)
   "Return a function to invoke FUNC passing the contents of
 DESCRIPTOR and a tag as arguments."
-  (lexical-let ((loc-descriptor descriptor)
+  (let ((loc-descriptor descriptor)
                 (loc-func func))
     (lambda (tag)
       (quite--run-project-remote
@@ -297,11 +297,11 @@ DESCRIPTOR and a tag as arguments."
   TAG-FUNCTION-ALIST associates a dispatch tag with each
   function."
   (mapcar (lambda (tag-func-pair)
-            (lexical-let* ((tag (nth 0 tag-func-pair))
-                           (func (nth 1 tag-func-pair))
-                           (invoker (quite--generate-invoker
-                                     project-descriptor
-                                     func)))
+            (let* ((tag (nth 0 tag-func-pair))
+                   (func (nth 1 tag-func-pair))
+                   (invoker (quite--generate-invoker
+                             project-descriptor
+                             func)))
               (list :function (lambda (tag)
                                 (funcall invoker tag))
                     :tag tag)))
@@ -335,15 +335,15 @@ signature:
 
 (func host rootdir subdir buffer tag)
 "
-  (lexical-let ((loc-command-func command-func)
-                (loc-name-func buffer-name-func))
+  (let ((loc-command-func command-func)
+        (loc-name-func buffer-name-func))
     (lambda (host root subdir buffer tag)
       ;; Needed?
-      (lexical-let ((loc-host host)
-                    (loc-root root)
-                    (loc-subdir subdir)
-                    (loc-buffer buffer)
-                    (loc-tag tag))
+      (let ((loc-host host)
+            (loc-root root)
+            (loc-subdir subdir)
+            (loc-buffer buffer)
+            (loc-tag tag))
         (quite--run-in-buffer-context
          ;; Function to run
          (lambda ()
@@ -408,9 +408,9 @@ for use as a :default-host-func when specifying
   that dispatches to the appropriate function when passed a
   prefix argument. TAG-FUNCTION-ALIST assoicates a tag with a
   function to call, passing that tag as its last argument."
-  (lexical-let ((dispatch-list
-                 (quite--generate-dispatch-table
-                  project-descriptor tag-function-alist)))
+  (let ((dispatch-list
+         (quite--generate-dispatch-table
+          project-descriptor tag-function-alist)))
     (lambda (parg)
       (interactive "P")
       (save-excursion
@@ -433,17 +433,17 @@ Both functions should have the following signature:
 
 (func host rootdir subdir buffer tag)
 "
-  (lexical-let ((new-tag-function-alist
-                  ;; tag-function-alist contains the function to ultimately
-                  ;; execute.  Wrap it in a routine that executes it in a buffer
-                  ;; context.
-                  (mapcar (lambda (tag-func-pair)
-                            (lexical-let ((tag (nth 0 tag-func-pair))
-                                          (command-func (nth 1 tag-func-pair)))
-                              `(,tag
-                                ,(quite--generate-buffer-action
-                                  command-func buffer-name-func))))
-                          tag-function-alist)))
+  (let ((new-tag-function-alist
+         ;; tag-function-alist contains the function to ultimately
+         ;; execute.  Wrap it in a routine that executes it in a buffer
+         ;; context.
+         (mapcar (lambda (tag-func-pair)
+                   (let ((tag (nth 0 tag-func-pair))
+                         (command-func (nth 1 tag-func-pair)))
+                     `(,tag
+                       ,(quite--generate-buffer-action
+                         command-func buffer-name-func))))
+                 tag-function-alist)))
     (quite-generate-dispatcher project-descriptor new-tag-function-alist)))
 
 ;;;###autoload
