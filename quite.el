@@ -96,7 +96,7 @@ invoked with the current buffer to determine the host."
   "Remove the method/host prefix from PATH if present."
   ;; FIXME: Don't hard-code the method.
   (replace-regexp-in-string
-   "^\\(/ssh:\\([[:alnum:]]+@\\)?[[:alnum:]]+:\\)"
+   "^\\(/ssh:\\([-._[:alnum:]]+@\\)?[-._[:alnum:]]+:\\)"
    ""
    path))
 
