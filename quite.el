@@ -120,11 +120,18 @@ from HISTORY.  HISTORY has the same use as in `read-string'."
   (read-string prompt nil history history))
 
 (defun quite--extract-subdir (root project-dir)
-  "Return the path component below PROJECT-DIR in ROOT."
-  (when (string-match (format "%s/\\([^/]+/\\)*" project-dir) root)
-    (let ((result (match-string 1 root)))
-      ;; Remove the trailing /.
-      (substring result 0 (1- (length result))))))
+  "Return the path below PROJECT-DIR within ROOT.
+Return the empty string when ROOT ends at PROJECT-DIR, or nil when
+PROJECT-DIR does not appear in ROOT.  A trailing slash on ROOT is
+ignored.  With PROJECT-DIR \"project\":
+  \"/a/project/sub\" -> \"sub\"
+  \"/a/project/x/y\" -> \"x/y\"
+  \"/a/project\"     -> \"\"."
+  (let ((root (directory-file-name root)))
+    (when (string-match (format "\\(?:^\\|/\\)%s\\(?:/\\(.*\\)\\)?$"
+                                (regexp-quote project-dir))
+                        root)
+      (or (match-string 1 root) ""))))
 
 (defun quite--doit (tag func)
   "Run FUNC passing tag TAG."
