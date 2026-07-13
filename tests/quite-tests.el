@@ -65,17 +65,20 @@
     (expect (quite--prefix-arg-index 2) :to-equal 2)))
 
 (describe "quite--extract-subdir"
-  ;; FIXME: quite--extract-subdir is trailing-slash sensitive and drops path
-  ;; components.  These specs pin the CURRENT (buggy) behavior so a future fix
-  ;; is a deliberate, visible change.
-  (it "extracts the subdir when the root has a trailing slash"
+  (it "extracts the subdir below the project dir"
+    (expect (quite--extract-subdir "/path/to/project/subdir" "project")
+            :to-equal "subdir"))
+  (it "extracts a multi-level subpath"
+    (expect (quite--extract-subdir "/path/to/project/a/b" "project")
+            :to-equal "a/b"))
+  (it "ignores a trailing slash on the root"
     (expect (quite--extract-subdir "/path/to/project/subdir/" "project")
             :to-equal "subdir"))
-  (it "returns nil without a trailing slash (FIXME: should be \"subdir\")"
-    (expect (quite--extract-subdir "/path/to/project/subdir" "project")
-            :to-equal nil))
-  (it "returns nil at the project root"
+  (it "returns the empty string at the project root"
     (expect (quite--extract-subdir "/path/to/project" "project")
+            :to-equal ""))
+  (it "returns nil when the project dir is absent"
+    (expect (quite--extract-subdir "/path/to/other" "project")
             :to-equal nil)))
 
 (describe "quite-project-parse-descriptor"
