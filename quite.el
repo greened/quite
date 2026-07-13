@@ -72,9 +72,11 @@ invoked with the current buffer to determine the host."
   "List of project descriptors.  A descriptor is a plist
   consisting of:
 
-:project-dir  Project directory name, appended to members of :root-list to form a potential project path.
+:project-dir  Project directory name, appended to members of :root-list
+              to form a potential project path.
 :root-list    List of directories to search for :project-dir.
-:key-files    List of files to look for in /:root-list/:project-dir.  Presence of a file signals a valid project directory.
+:key-files    List of files to look for in /:root-list/:project-dir.
+              Presence of a file signals a valid project directory.
 :function     Function to invoke."
   :type '(repeat
 	  (plist
@@ -142,8 +144,7 @@ nil/0 -> invoke function #1
 16    -> invoke function #3
 64    -> invoke function #4
 
-This corresponds to prefix argument values passed by '' 'C-u' 'C-u C-u' and so
-on.
+This corresponds to prefix arguments: no prefix, C-u, C-u C-u, and so on.
 
 Typical use of `quite--dispatch' is:
   (defun command1-func (tag)
@@ -152,15 +153,15 @@ Typical use of `quite--dispatch' is:
     (message \"command2 %s\" tag))
 
   (setq command1
-        '(:function 'command1-func :tag \"command1\"))
+        (list :function (function command1-func) :tag \"command1\"))
   (setq command2
-        '(:function 'command2-func :tag \"command2\"))
+        (list :function (function command2-func) :tag \"command2\"))
 
   (defun do-quite (parg)
     (interactive \"P\")
-    (quite-dispatch parg
-                    command1
-                    command2))
+    (quite--dispatch parg
+                     command1
+                     command2))
 
 "
   (save-excursion
@@ -281,13 +282,8 @@ project descriptor entires and the oath of the current buffer."
 (defun quite--generate-invoker (descriptor func)
   "Return a function to invoke FUNC passing the contents of
 DESCRIPTOR and a tag as arguments."
-  (let ((loc-descriptor descriptor)
-                (loc-func func))
-    (lambda (tag)
-      (quite--run-project-remote
-       loc-func
-       loc-descriptor
-       tag))))
+  (lambda (tag)
+    (quite--run-project-remote func descriptor tag)))
 
 (defun quite--generate-dispatch-table (project-descriptor tag-function-alist)
   "Given a PROJECT-DESCRIPTOR and a TAG-FUNCTION-ALIST, create a
@@ -335,23 +331,15 @@ signature:
 
 (func host rootdir subdir buffer tag)
 "
-  (let ((loc-command-func command-func)
-        (loc-name-func buffer-name-func))
-    (lambda (host root subdir buffer tag)
-      ;; Needed?
-      (let ((loc-host host)
-            (loc-root root)
-            (loc-subdir subdir)
-            (loc-buffer buffer)
-            (loc-tag tag))
-        (quite--run-in-buffer-context
-         ;; Function to run
-         (lambda ()
-           (funcall loc-command-func host root subdir buffer tag))
-         ;; Buffer to run in
-         buffer
-         ;; Buffer name
-         (funcall loc-name-func host root subdir buffer tag))))))
+  (lambda (host root subdir buffer tag)
+    (quite--run-in-buffer-context
+     ;; Function to run
+     (lambda ()
+       (funcall command-func host root subdir buffer tag))
+     ;; Buffer to run in
+     buffer
+     ;; Buffer name
+     (funcall buffer-name-func host root subdir buffer tag))))
 
 (defun quite--buffer-format (string spec-alist)
   "Format STRING using SPEC-ALIST.
@@ -360,12 +348,12 @@ function that generates a string.  Wherever the placeholder is
 used in STRING, the mapped string or value created by the mapped
 generating function will be substituted.  For example:
 
-(quite-buffer-format \"*%h-compile*\" ((?H \"my.host.com\") (?h \"my\") (?p 'buffer-file-name)))"
+(quite--buffer-format \"*%h-compile*\" ((?H \"my.host.com\") (?h \"my\") (?p (function buffer-file-name))))"
   (let ((mapped-spec-alist (mapcar (lambda (spec)
 				     (let* ((char (nth 0 spec))
 					    (value (nth 1 spec))
 					    (mapped-value (if (functionp value)
-							      (funcall functionp)
+							      (funcall value)
 							    value)))
 				       (list char mapped-value)))
 				   spec-alist)))
@@ -396,7 +384,7 @@ with a local file, prompt for user input otherwise."
 	(funcall default-host-func (current-buffer))))))
 
 ;;;###autoload
-(defun quite-remote-localhost (buffer)
+(defun quite-remote-localhost (_buffer)
   "Return the local host name.  This is a convenience function
 for use as a :default-host-func when specifying
 `quite-remote-descriptors'"
@@ -448,17 +436,174 @@ Both functions should have the following signature:
 
 ;;;###autoload
 (defun quite-execute (parg)
-  "Invoke a function according to prefix argument PARG,
-using a list of descriptors configured in
-`quite-descriptors'.
-
-quite-execute examines a "dispatch table" and selects one
-accoring to the prefix argument passed to it.  It then invokes
-the selected function, passing the prefix argument to it.  The
-dispatch table is of the form:
-"
+  "Invoke a function chosen by prefix argument PARG.
+Dispatches among the entries of `quite-descriptors' with
+`quite--dispatch': PARG selects which descriptor's :function to
+invoke (see `quite--dispatch' for the prefix-argument-to-index
+mapping)."
   (interactive "P")
-  (quite-dispatch parg quite-descriptors))
+  (apply #'quite--dispatch parg quite-descriptors))
+
+
+
+;;; Project build composition
+
+;; The functions below turn a compact PROJECT spec into (a) bindings in
+;; `quite-command-map' and (b) hydra heads for a project's build commands.  A PROJECT is a
+;; plist; see `quite-define-project' for the keys.  `quite-bind-project-commands'
+;; and `quite-project-hydra-heads' are independent -- neither depends on the
+;; other having run -- because each derives its own dispatcher from the spec
+;; (dispatchers only need to be equivalent, not the same object).
+
+(defun quite--make-build-command (command git-project-name &optional prefix postfix)
+  "Return a build function that compiles a git-project COMMAND.
+The returned function has the quite command signature
+\(HOST ROOT SUBDIR BUFFER TAG) and, when invoked, runs
+\"PREFIX git GIT-PROJECT-NAME COMMAND TAG POSTFIX\" via `compile'."
+  (let ((template (format "%s git %s %%s %%s %s"
+                          (or prefix "") git-project-name (or postfix ""))))
+    (lambda (_host _root _subdir _buffer tag)
+      (compile (format template command tag)))))
+
+(defun quite--make-buffer-name (project-name name)
+  "Return a function naming the compilation buffer for build NAME.
+The returned function has the quite command signature
+\(HOST ROOT SUBDIR BUFFER TAG); HOST is shortened to its first dotted
+component."
+  (lambda (host _root subdir _buffer tag)
+    (format "*%s-%s-%s-%s-%s*"
+            project-name name subdir tag (car (split-string host "\\.")))))
+
+(defun quite--broadcast-to-flavors (command-func flavors)
+  "Return a tag-function alist mapping every flavor in FLAVORS to COMMAND-FUNC."
+  (mapcar (lambda (flavor) (list flavor command-func)) flavors))
+
+(defcustom quite-flavor-abbreviations nil
+  "Alist of (REGEXP . REPLACEMENT) abbreviations for hydra head descriptions.
+Each flavor (tag) name is passed through every pair in order via
+`replace-regexp-in-string' before being shown in a hydra head.  When
+nil no abbreviation is done.  Projects/overlays typically set this."
+  :type '(alist :key-type regexp :value-type string)
+  :group 'quite)
+
+(defun quite--abbreviate-flavor (flavors)
+  "Abbreviate each flavor name in FLAVORS via `quite-flavor-abbreviations'."
+  (mapcar (lambda (flavor)
+            (let ((result flavor))
+              (dolist (pair quite-flavor-abbreviations result)
+                (setq result (replace-regexp-in-string (car pair) (cdr pair) result)))))
+          flavors))
+
+;; Ordering convention: the POSITION of a prefix in a project's :prefixes list
+;; is its prefix-argument index -- element 0 runs with no prefix arg, element 1
+;; with one C-u, element 2 with two C-u, and so on (see
+;; `quite--prefix-arg-index').  Position encodes the C-u count; there is
+;; deliberately no explicit index field.
+(defun quite--project-flavors (target transform-name prefixes)
+  "Return the ordered list of flavor (tag) names for TARGET and TRANSFORM-NAME.
+One flavor is produced per plist in PREFIXES, named
+\"TARGET-PREFIXNAME-TRANSFORMNAME\".  List order is significant: it is
+the prefix-argument dispatch order."
+  (mapcar (lambda (prefix)
+            (format "%s-%s-%s" target prefix transform-name))
+          prefixes))
+
+(defun quite--project-command-key (command transform)
+  "Return the variant key string for COMMAND under TRANSFORM.
+COMMAND and TRANSFORM are plists; the transform's :func maps the
+command's :key to its variant (e.g. `identity' or `upcase')."
+  (funcall (plist-get transform :func) (plist-get command :key)))
+
+(defun quite--project-command-dispatcher (project command transform)
+  "Return the buffer dispatcher for COMMAND under TRANSFORM in PROJECT.
+The dispatcher (see `quite-generate-buffer-dispatcher') runs COMMAND
+for the flavor selected by the prefix argument.  Pure: called
+identically by `quite-bind-project-commands' and
+`quite-project-hydra-heads'."
+  (let ((flavors (quite--project-flavors (plist-get project :target)
+                                         (plist-get transform :name)
+                                         (plist-get project :prefixes)))
+        (build-func (quite--make-build-command (plist-get command :command)
+                                               (plist-get project :git-name)
+                                               (plist-get project :command-prefix)
+                                               (plist-get project :command-postfix)))
+        (buffer-name-func (quite--make-buffer-name (plist-get project :name)
+                                                   (plist-get command :name))))
+    (quite-generate-buffer-dispatcher
+     (plist-get project :descriptor)
+     buffer-name-func
+     (quite--broadcast-to-flavors build-func flavors))))
+
+(defvar quite-command-map (make-sparse-keymap)
+  "Keymap of project build-command bindings populated by
+`quite-bind-project-commands'.  Bind it to a prefix key in your
+configuration to reach the commands, for example
+  (global-set-key (kbd ...) quite-command-map)
+Within the map each command is bound at its project PREFIX-KEY
+concatenated with the command's variant key.")
+
+;;;###autoload
+(defun quite-bind-project-commands (project)
+  "Bind PROJECT's build commands into `quite-command-map'.
+For every command x transform, bind PREFIX-KEY concatenated with the
+command's variant key to that command's dispatcher.  Returns the map.
+Independent of
+`quite-project-hydra-heads'.  PROJECT is a plist; see
+`quite-define-project'."
+  (let ((prefix-key (plist-get project :prefix-key)))
+    (dolist (command (plist-get project :commands))
+      (dolist (transform (plist-get project :transforms))
+        (define-key quite-command-map
+                    (kbd (concat prefix-key
+                                 (quite--project-command-key command transform)))
+                    (quite--project-command-dispatcher project command transform))))
+    quite-command-map))
+
+;;;###autoload
+(defun quite-project-hydra-heads (project)
+  "Return hydra heads describing PROJECT's build commands.
+Each head is (VARIANT-KEY DISPATCHER DESCRIPTION :column COLUMN).  Pure:
+it builds its own dispatchers and does not depend on
+`quite-bind-project-commands' having run.  PROJECT is a plist; see
+`quite-define-project'."
+  (let ((target (plist-get project :target))
+        (project-name (plist-get project :name))
+        (prefixes (plist-get project :prefixes))
+        (heads nil))
+    (dolist (command (plist-get project :commands))
+      (dolist (transform (plist-get project :transforms))
+        (let* ((flavors (quite--project-flavors target (plist-get transform :name)
+                                                prefixes))
+               (description (mapconcat #'identity
+                                       (quite--abbreviate-flavor flavors) " "))
+               (column (format "%s %s" project-name (plist-get command :name))))
+          (push (list (quite--project-command-key command transform)
+                      (quite--project-command-dispatcher project command transform)
+                      description
+                      :column column)
+                heads))))
+    (nreverse heads)))
+
+;;;###autoload
+(defun quite-define-project (project)
+  "Install PROJECT's build commands and return its hydra heads.
+Binds every command via `quite-bind-project-commands' and returns the
+heads from `quite-project-hydra-heads'.  Usual entry point for overlays.
+
+PROJECT is a plist:
+  :git-name        git-project name for the compile command
+  :name            project name (buffer names, hydra columns)
+  :descriptor      a `quite-project-descriptors' plist
+  :prefix-key      key prefix inserted after \"C-c \"
+  :target          target string used in flavor (tag) names
+  :commands        list of (:name :command :key) plists
+  :prefixes        list of prefix-name strings; list ORDER is the C-u index
+                   (position 0 = no prefix, 1 = one C-u, 2 = two C-u, ...)
+  :transforms      list of (:name :func) plists (:func maps a command key)
+  :command-prefix  optional shell text before the compile command
+  :command-postfix optional shell text after the compile command"
+  (quite-bind-project-commands project)
+  (quite-project-hydra-heads project))
 
 (provide 'quite)
 
