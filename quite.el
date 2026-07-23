@@ -255,7 +255,10 @@ without the remote prefix."
                          (throw 'found try-root)))))))
             (if (not found-root)
                 (error (format "%s does not exist in %s with %s on %s"
-                               project-dir root-list key-files host)))))
+                               project-dir root-list key-files host))
+              ;; return the found root (prefix-less) -- the whole search branch's
+              ;; value; without this the function returned nil even on a hit
+              found-root)))
       (quite-remote--strip-host the-root))))
 
 (defun quite-project-parse-descriptor (descriptor)
