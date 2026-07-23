@@ -41,6 +41,9 @@
 ;; function.
 
 ;;; Code:
+(require 'compile)
+(require 'seq)
+
 ;;; Custom variables
 
 (defgroup quite nil
@@ -592,6 +595,10 @@ it builds its own dispatchers and does not depend on
     (nreverse heads)))
 
 ;;;###autoload
+(defvar quite--projects nil
+  "Alist of (NAME . PROJECT-PLIST) for projects passed to `quite-define-project'.
+Lets code invoke a project's build headlessly via `quite-run'.")
+
 (defun quite-define-project (project)
   "Install PROJECT's build commands and return its hydra heads.
 Binds every command via `quite-bind-project-commands' and returns the
@@ -609,8 +616,39 @@ PROJECT is a plist:
   :transforms      list of (:name :func) plists (:func maps a command key)
   :command-prefix  optional shell text before the compile command
   :command-postfix optional shell text after the compile command"
+  (setf (alist-get (plist-get project :name) quite--projects nil nil #'equal)
+        project)
   (quite-bind-project-commands project)
   (quite-project-hydra-heads project))
+
+;;;###autoload
+(defun quite-run (name command &optional dir buffer-name)
+  "Run COMMAND (\"build\", \"check\", ...) for registered project NAME in DIR.
+NAME is a project previously passed to `quite-define-project'; COMMAND matches
+one of its :commands' :command.  DIR (default `default-directory') is where the
+build runs -- via `compile', so a remote (TRAMP) DIR builds on that host, in a
+visible compilation buffer.  BUFFER-NAME, when given, names that buffer (so a
+caller can make it unique per checkout); otherwise the usual `compile' default
+applies.  Returns the compilation buffer.
+
+A headless entry point -- no hydra, keymap, or file-visiting buffer required --
+for tools (e.g. gaffer) that drive a project build programmatically.  It reuses
+the project's own compile command, so the build matches the interactive one."
+  (let* ((project (or (cdr (assoc name quite--projects))
+                      (error "quite: no registered project %S" name)))
+         (cmd (or (seq-find (lambda (c) (equal (plist-get c :command) command))
+                            (plist-get project :commands))
+                  (error "quite: project %S has no command %S" name command)))
+         (build-func (quite--make-build-command
+                      (plist-get cmd :command)
+                      (plist-get project :git-name)
+                      (plist-get project :command-prefix)
+                      (plist-get project :command-postfix)))
+         (default-directory (file-name-as-directory (or dir default-directory)))
+         (compilation-buffer-name-function
+          (if buffer-name (lambda (&rest _) buffer-name)
+            compilation-buffer-name-function)))
+    (funcall build-func nil nil nil nil (plist-get project :target))))
 
 (provide 'quite)
 
