@@ -18,6 +18,12 @@ the one after, and so on. `quite-define-project` composes a whole matrix of
 > configuration is deliberately explicit (you describe your projects and command
 > vocabulary yourself). See **Caveats**.
 
+![quite: a project's command × flavor matrix, then running build and check via compile](docs/media/quite.gif)
+
+*One prefix key reaches a grid of build variants (commands × flavors); picking
+one runs it as ordinary `compile` — so a remote `default-directory` builds on the
+remote host. (Example data; the build command is stubbed to echo.)*
+
 ## What it does
 
 - **The host follows the buffer.** `quite` inspects the current buffer with
@@ -118,7 +124,9 @@ keymap/Hydra, or a tool like a PR-work orchestrator that calls `quite-run`), and
 the *build host* is local or any TRAMP remote. `quite-run PROJECT COMMAND [DIR]`
 runs a registered project's command headlessly (no keymap, Hydra, or file-
 visiting buffer needed), reusing the same compile command as the interactive
-path, so a programmatic build matches what you'd get by hand. Internals — the
+path, so a programmatic build matches what you'd get by hand.
+
+![quite-run: calling a registered project's build headlessly, no keymap or Hydra](docs/media/quite-run.gif) Internals — the
 project/descriptor data model, the dispatch machinery, and the extension points —
 are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
