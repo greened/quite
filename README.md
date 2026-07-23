@@ -78,6 +78,50 @@ Execution itself is ordinary `compile`, so remoteness is carried by
 `default-directory`/TRAMP — `quite`'s job is to *point it at the right host and
 root* and to organize the command matrix.
 
+## Architecture
+
+quite defines your projects, exposes them two ways — an **interactive** matrix
+(keymap + Hydra, host/root resolved from the current buffer) and a **headless**
+entry (`quite-run`, for scripts and orchestrators) — and both bottom out in plain
+`compile`, so a remote `default-directory` runs the build on the remote host. A
+generic **caller** (a keybinding, a Hydra, or an orchestrator like a build/test
+driver) reaches quite through either path:
+
+```mermaid
+flowchart TB
+  subgraph quite
+    direction TB
+    DEF["quite-define-project<br/>commands × transforms × prefixes"]
+    REG[("quite--projects<br/>registry")]
+    MAP["quite-command-map<br/>+ Hydra heads"]
+    RUN["quite-run<br/>NAME COMMAND [DIR BUFFER]"]
+    CTX["host/root from buffer<br/>remote-host · find-project"]
+    CMD["quite--make-build-command<br/>→ compile"]
+    DEF --> REG
+    DEF --> MAP
+    REG --> RUN
+    MAP --> CTX --> CMD
+    RUN --> CMD
+  end
+  CALLER["caller<br/>keybinding · Hydra · orchestrator"]
+  HOST[("build host<br/>local or TRAMP")]
+  CALLER -. "C-c keys / Hydra" .-> MAP
+  CALLER -. "quite-run (programmatic)" .-> RUN
+  CMD == "compile in default-directory" ==> HOST
+
+  classDef ext fill:#eee,stroke:#888,stroke-dasharray:5 3;
+  class CALLER,HOST ext;
+```
+
+The dashed boxes are generic — the *caller* is whatever binds quite (your config's
+keymap/Hydra, or a tool like a PR-work orchestrator that calls `quite-run`), and
+the *build host* is local or any TRAMP remote. `quite-run PROJECT COMMAND [DIR]`
+runs a registered project's command headlessly (no keymap, Hydra, or file-
+visiting buffer needed), reusing the same compile command as the interactive
+path, so a programmatic build matches what you'd get by hand. Internals — the
+project/descriptor data model, the dispatch machinery, and the extension points —
+are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## How it compares
 
 Short version: the **remote-execution** part of `quite` is not, by itself,
