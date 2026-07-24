@@ -625,18 +625,22 @@ PROJECT is a plist:
   (quite-project-hydra-heads project))
 
 ;;;###autoload
-(defun quite-run (name command &optional dir buffer-name)
+(defun quite-run (name command &optional dir buffer-name tag)
   "Run COMMAND (\"build\", \"check\", ...) for registered project NAME in DIR.
 NAME is a project previously passed to `quite-define-project'; COMMAND matches
 one of its :commands' :command.  DIR (default `default-directory') is where the
 build runs -- via `compile', so a remote (TRAMP) DIR builds on that host, in a
 visible compilation buffer.  BUFFER-NAME, when given, names that buffer (so a
 caller can make it unique per checkout); otherwise the usual `compile' default
-applies.  Returns the compilation buffer.
+applies.  TAG, when given, is the exact build tag passed to the tool -- a full
+flavor string such as \"llvm-project-devrel-cluster\"; otherwise the project's
+:target stem is used.  Returns the compilation buffer.
 
 A headless entry point -- no hydra, keymap, or file-visiting buffer required --
 for tools (e.g. gaffer) that drive a project build programmatically.  It reuses
-the project's own compile command, so the build matches the interactive one."
+the project's compile command; the interactive path expands :target into a
+prefix/transform flavor, so a headless caller that wants a specific flavor should
+pass TAG (the bare :target stem is used otherwise)."
   (let* ((project (or (cdr (assoc name quite--projects))
                       (error "quite: no registered project %S" name)))
          (cmd (or (seq-find (lambda (c) (equal (plist-get c :command) command))
@@ -651,7 +655,33 @@ the project's own compile command, so the build matches the interactive one."
          (compilation-buffer-name-function
           (if buffer-name (lambda (&rest _) buffer-name)
             compilation-buffer-name-function)))
-    (funcall build-func nil nil nil nil (plist-get project :target))))
+    (funcall build-func nil nil nil nil (or tag (plist-get project :target)))))
+
+(defvar quite--repo-builds nil
+  "Alist mapping a repo (\"owner/name\") to a build plist with keys :project (a
+registered quite project NAME), :build-target and :test-target (full build tags,
+e.g. \"llvm-project-devrel-cluster\").  Populated by `quite-register-repo' and
+consulted by `quite-run-repo'.")
+
+(defun quite-register-repo (repo &rest plist)
+  "Register REPO's headless build details.
+PLIST keys: :project (a registered quite project name), :build-target and
+:test-target (full build-tag strings passed to `quite-run').  Lets a repo-keyed
+driver (e.g. gaffer) build a repo without knowing quite's project/target model."
+  (setf (alist-get repo quite--repo-builds nil nil #'equal) plist)
+  repo)
+
+(defun quite-run-repo (repo kind dir buffer-name)
+  "Run KIND (`build' or `test') for REPO in DIR, into a compilation buffer named
+BUFFER-NAME.  Resolves REPO's project and per-kind target from the registry
+\(`quite-register-repo') and drives `quite-run' with the full target tag.  A
+repo-keyed, tool-agnostic entry point for headless drivers."
+  (let* ((entry (or (cdr (assoc repo quite--repo-builds))
+                    (error "quite: repo %S not registered (see quite-register-repo)"
+                           repo)))
+         (command (if (eq kind 'test) "check" "build"))
+         (target  (plist-get entry (if (eq kind 'test) :test-target :build-target))))
+    (quite-run (plist-get entry :project) command dir buffer-name target)))
 
 (provide 'quite)
 
