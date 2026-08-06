@@ -1,40 +1,40 @@
-# quite — QUIck Transparent Execution
+# quite: QUIck Transparent Execution
 
 `quite` runs a project's build and development commands **on the host where the
-file you are editing actually lives** — your local machine when the current
-buffer visits a local file, or a remote host (over TRAMP) when it visits a
-remote file — without you having to think about which. It works out the host
-and the project root from the current buffer, then runs the command there in a
+file you are editing actually lives**. That is your local machine when the
+current buffer visits a local file, or a remote host (over TRAMP) when it visits
+a remote file. You do not have to think about which. It works out the host and
+the project root from the current buffer, then runs the command there in a
 dedicated, predictably named compilation buffer.
 
-Its distinctive feature is **prefix-argument dispatch to command _flavors_**: a
+Its distinctive feature is **prefix-argument dispatch to command _flavors_**. A
 single key runs, say, `build`, and the prefix argument selects *which* flavor of
-that build to run — no prefix for one flavor, `C-u` for the next, `C-u C-u` for
-the one after, and so on. `quite-define-project` composes a whole matrix of
+that build to run. No prefix runs one flavor, `C-u` runs the next, `C-u C-u`
+runs the one after and so on. `quite-define-project` composes a whole matrix of
 *commands × transforms × flavors* into a keymap and a
 [Hydra](https://github.com/abo-abo/hydra).
 
-> Status: small, single-author package; the public surface is stable but the
+> Status: small, single-author package. The public surface is stable but the
 > configuration is deliberately explicit (you describe your projects and command
-> vocabulary yourself). See **Caveats**.
+> vocabulary yourself). For the trade-offs, see **quite: pros and cons** below.
 
 ![quite: a project's command × flavor matrix, then running build and check via compile](docs/media/quite.gif)
 
-*One prefix key reaches a grid of build variants (commands × flavors); picking
-one runs it as ordinary `compile` — so a remote `default-directory` builds on the
-remote host. (Example data; the build command is stubbed to echo.)*
+*One prefix key reaches a grid of build variants (commands × flavors). Picking
+one runs it as ordinary `compile`, so a remote `default-directory` builds on the
+remote host. (Example data. The build command is stubbed to echo.)*
 
 ## What it does
 
 - **The host follows the buffer.** `quite` inspects the current buffer with
   `file-remote-p`/`buffer-file-name`. A remote (`/ssh:host:…`) buffer runs the
-  command on `host`; a local buffer runs it on the local machine. You use the
+  command on `host`. A local buffer runs it on the local machine. You use the
   same key either way.
 - **Project discovery.** A *project descriptor* is a plist of `:project-dir`,
   `:root-list` and `:key-files`. `quite` either infers the project root from the
   buffer's own path, or searches the `:root-list` directories **on the resolved
   host** for `:project-dir` containing one of the `:key-files`.
-- **Flavor dispatch.** Each command is bound once; the raw prefix argument
+- **Flavor dispatch.** Each command is bound once. The raw prefix argument
   indexes into an ordered list of flavors (e.g. `release` then `debug`), and the
   chosen flavor's tag is passed through to the shell command.
 - **Composition.** `quite-define-project` turns a compact spec into (a) bindings
@@ -64,11 +64,11 @@ remote host. (Example data; the build command is stubbed to echo.)*
                           (list :name "cluster" :func #'upcase))))
 ```
 
-With the above, `C-c q r b` builds `llvm-project`'s `devrel` flavor locally;
-`C-u C-c q r b` builds the `devdbg` flavor; `C-c q r B` (upcased key) builds the
-`cluster` variant; and `C-c q r h` pops the project's build Hydra. If the buffer
-you invoke from is remote, every one of those runs on the remote host instead —
-same keys.
+With the above, `C-c q r b` builds `llvm-project`'s `devrel` flavor locally.
+`C-u C-c q r b` builds the `devdbg` flavor. `C-c q r B` (upcased key) builds the
+`cluster` variant, and `C-c q r h` pops the project's build Hydra. If the buffer
+you invoke from is remote, every one of those runs on the remote host instead,
+using the same keys.
 
 ## How it works (the moving parts)
 
@@ -81,17 +81,17 @@ same keys.
 | `quite-define-project` | composes commands × transforms × flavors into `quite-command-map` + Hydra heads |
 
 Execution itself is ordinary `compile`, so remoteness is carried by
-`default-directory`/TRAMP — `quite`'s job is to *point it at the right host and
+`default-directory`/TRAMP. `quite`'s job is to *point it at the right host and
 root* and to organize the command matrix.
 
 ## Architecture
 
-quite defines your projects, exposes them two ways — an **interactive** matrix
-(keymap + Hydra, host/root resolved from the current buffer) and a **headless**
-entry (`quite-run`, for scripts and orchestrators) — and both bottom out in plain
-`compile`, so a remote `default-directory` runs the build on the remote host. A
-generic **caller** (a keybinding, a Hydra, or an orchestrator like a build/test
-driver) reaches quite through either path:
+quite defines your projects and exposes them two ways. One is an **interactive**
+matrix (keymap + Hydra, host/root resolved from the current buffer). The other
+is a **headless** entry (`quite-run`, for scripts and orchestrators). Both
+bottom out in plain `compile`, so a remote `default-directory` runs the build on
+the remote host. A generic **caller** (a keybinding, a Hydra or an orchestrator
+like a build/test driver) reaches quite through either path:
 
 ```mermaid
 flowchart TB
@@ -119,27 +119,28 @@ flowchart TB
   class CALLER,HOST ext;
 ```
 
-The dashed boxes are generic — the *caller* is whatever binds quite (your config's
-keymap/Hydra, or a tool like a PR-work orchestrator that calls `quite-run`), and
-the *build host* is local or any TRAMP remote. `quite-run PROJECT COMMAND [DIR]`
-runs a registered project's command headlessly (no keymap, Hydra, or file-
-visiting buffer needed), reusing the same compile command as the interactive
-path, so a programmatic build matches what you'd get by hand.
+The dashed boxes are generic. The *caller* is whatever binds quite. That is
+your config's keymap or Hydra, or a tool that calls `quite-run`, such as the
+PR-work orchestrator [gaffer](https://github.com/greened/gaffer). The *build
+host* is local or any TRAMP remote. `quite-run
+PROJECT COMMAND [DIR]` runs a registered project's command headlessly (no
+keymap, Hydra or file-visiting buffer needed), reusing the same compile command
+as the interactive path, so a programmatic build matches what you'd get by hand.
 
-![quite-run: calling a registered project's build headlessly, no keymap or Hydra](docs/media/quite-run.gif) Internals — the
-project/descriptor data model, the dispatch machinery, and the extension points —
+![quite-run: calling a registered project's build headlessly, no keymap or Hydra](docs/media/quite-run.gif) Internals, meaning the
+project/descriptor data model, the dispatch machinery and the extension points,
 are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How it compares
 
 Short version: the **remote-execution** part of `quite` is not, by itself,
-unique — any package that runs `compile` with a remote `default-directory` (which
+unique. Any package that runs `compile` with a remote `default-directory` (which
 is most of them) already runs on the remote host, because that is a TRAMP
 feature. What `quite` adds on top is (1) resolving the host **and** the project
 root *from the current buffer*, including searching a list of candidate roots on
 that host, and (2) the **prefix-argument flavor matrix** with keymap/Hydra
 composition. If you want a build/test command bound per project, the mainstream
-packages do that better; if you want one key to reach a *grid* of build variants
+packages do that better. If you want one key to reach a *grid* of build variants
 that transparently follows you between local and remote trees, that is `quite`'s
 niche.
 
@@ -148,15 +149,15 @@ niche.
 `project.el` is Emacs's built-in project framework. `project-compile` and
 `project-shell-command` run in the project root, and because they inherit
 `default-directory`, they already run on the remote host for a remote project.
-But `project.el` offers no notion of build *flavors*, no prefix-dispatched
-command grid, and its project detection is VC/marker-based rather than
+But `project.el` offers no notion of build *flavors* and no prefix-dispatched
+command grid. Its project detection is VC/marker-based rather than
 "search these roots on this host for this directory." It is general project
-management; command execution is intentionally minimal.
+management, and command execution is intentionally minimal.
 
 ### vs. Projectile
 
 Projectile is the heavyweight general project manager (navigation, search,
-replace, and much more). Its `projectile-compile-project` /
+replace and much more). Its `projectile-compile-project` /
 `projectile-test-project` / `projectile-run-project` remember a *single*
 configurable command per project (with history) and are TRAMP-aware. That covers
 "run my build" well, but it is one command per action, not an indexed matrix of
@@ -168,7 +169,7 @@ are all you need.
 [`projection`](https://github.com/mohkale/projection) is the closest in spirit:
 a `project.el` extension that generates *project-type-aware* commands with almost
 exactly `quite`'s vocabulary (configure / build / test / run / package /
-install), supports multiple command options per type, and is remote-aware. It is
+install), supports multiple command options per type and is remote-aware. It is
 better maintained and more automatic (it *detects* the toolchain), but it is
 driven by project *type* rather than by an explicit descriptor + prefix-flavor
 matrix, and it has no direct equivalent of "one key, prefix-selected flavor."
@@ -176,16 +177,16 @@ matrix, and it has no direct equivalent of "one key, prefix-selected flavor."
 ### vs. `compile` / `recompile`
 
 These are the primitive `quite` builds on. `compile` runs a shell command in
-`default-directory` (remote if the buffer is remote); `recompile` repeats it.
-No project resolution, no flavors, no composition — you supply the full command
+`default-directory` (remote if the buffer is remote). `recompile` repeats it.
+No project resolution, no flavors, no composition. You supply the full command
 each time.
 
 ### Adjacent, different niches
 
-- **prodigy.el** — manages long-running *services/daemons* (start/stop/restart),
+- **prodigy.el** manages long-running *services/daemons* (start/stop/restart),
   not one-shot build commands.
-- **emacs-taskrunner / helm-make / makefile-executor** — *discover* tasks from
-  Makefiles, npm, etc. and run them; no host-from-buffer model and no flavor
+- **emacs-taskrunner / helm-make / makefile-executor** *discover* tasks from
+  Makefiles, npm, etc. and run them. No host-from-buffer model and no flavor
   matrix.
 
 ### Feature matrix
@@ -211,11 +212,11 @@ action. ⁴ Defers to `project.el` for management.
 
 | Pros | Cons |
 |---|---|
-| Same keys run locally or remotely — execution follows the buffer's host | Niche; overlaps with better-maintained general packages |
+| Same keys run locally or remotely, following the buffer's host | Niche. Overlaps with better-maintained general packages |
 | Prefix-argument **flavor matrix**: one key, many build variants | Idiosyncratic flavor model with a learning curve |
 | Explicit **multi-root search** on the resolved host | You must hand-write descriptors + the command/flavor matrix (no auto-detection) |
 | Composes cleanly into a keymap + Hydra | Small, single-author project |
-| Lightweight and focused; builds on plain `compile` | Its remote transparency largely *is* TRAMP + `default-directory`, not unique |
+| Lightweight and focused. Builds on plain `compile` | Its remote transparency largely *is* TRAMP + `default-directory`, not unique |
 
 **Use `quite`** when you routinely build the *same* trees across local and
 remote hosts and want one key to reach a grid of build flavors. **Prefer
