@@ -1,0 +1,8 @@
+# Cask sandbox (dev dependencies fetched by `cask install`).
+/.cask/
+
+# Byte-compiled Emacs Lisp.
+*.elc
+
+# Cask package output.
+/dist/
