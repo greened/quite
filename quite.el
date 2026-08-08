@@ -227,10 +227,9 @@ buffer for it.  Return nil otherwise."
 	(when buffer (throw 'found buffer))))))
 
 (defun quite-project-find-project (project-dir host root-list key-files)
-  "Check directories in ROOT-LIST on HOST for PROJECT_DIR and return one if found,
-prompt otherwise.  Ensure that one of KEY-FILES is in the
-returned root.  The returned ROOT is a path on the remote HOST,
-without the remote prefix."
+  "Check ROOT-LIST on HOST for PROJECT_DIR and return one if found, prompt
+otherwise.  Ensure one of KEY-FILES is in the returned root.  The returned ROOT
+is a path on the remote HOST, without the remote prefix."
   (let ((the-root
          (quite-project--path-for-buffer project-dir key-files)))
     (if (not the-root)
@@ -599,8 +598,9 @@ it builds its own dispatchers and does not depend on
 
 ;;;###autoload
 (defvar quite--projects nil
-  "Alist of (NAME . PROJECT-PLIST) for projects passed to `quite-define-project'.
-Lets code invoke a project's build headlessly via `quite-run'.")
+  "Alist of (NAME . PROJECT-PLIST) for projects passed to
+`quite-define-project'.  Lets code invoke a project's build headlessly via
+`quite-run'.")
 
 (defun quite-define-project (project)
   "Install PROJECT's build commands and return its hydra heads.
@@ -639,8 +639,8 @@ flavor string such as \"llvm-project-devrel-cluster\"; otherwise the project's
 A headless entry point -- no hydra, keymap, or file-visiting buffer required --
 for tools (e.g. gaffer) that drive a project build programmatically.  It reuses
 the project's compile command; the interactive path expands :target into a
-prefix/transform flavor, so a headless caller that wants a specific flavor should
-pass TAG (the bare :target stem is used otherwise)."
+prefix/transform flavor, so a headless caller that wants a specific flavor
+should pass TAG (the bare :target stem is used otherwise)."
   (let* ((project (or (cdr (assoc name quite--projects))
                       (error "quite: no registered project %S" name)))
          (cmd (or (seq-find (lambda (c) (equal (plist-get c :command) command))
