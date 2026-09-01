@@ -27,7 +27,7 @@ flowchart TB
     MAP["quite-command-map + Hydra heads"]
     RUN["quite-run · headless"]
     CTX["host/root from buffer<br/>remote-host · find-project"]
-    CMD["quite--make-build-command → compile"]
+    CMD["quite-build-command<br/>(architecture) → compile"]
     DEF --> REG
     DEF --> MAP
     REG --> RUN
@@ -54,30 +54,52 @@ flowchart TB
    buffer** (`quite-remote-host-for-current-buffer`, `quite-project-find-project`).
 2. **`quite-run` (headless)** — `quite-run NAME COMMAND &optional DIR BUFFER-NAME`
    looks the project up in `quite--projects`, builds the command with
-   `quite--make-build-command`, and runs it via `compile` in `DIR` (a remote DIR
+   `quite--project-build-command`, and runs it via `compile` in `DIR` (a remote DIR
    builds remotely) — no keymap, Hydra, or file-visiting buffer required. This is
    the integration entry a tool (e.g. a PR-work orchestrator) calls; it reuses the
    same build command as the matrix, so headless and interactive builds match.
 
-Both bottom out in `quite--make-build-command`, which returns a
-`(HOST ROOT SUBDIR BUFFER TAG)` function that runs
-`"PREFIX git GIT-NAME COMMAND TAG POSTFIX"` via `compile`. Execution is ordinary
-`compile`; quite only assembles the command line and sets the directory.
+Both bottom out in `quite--project-build-command`, which returns a
+`(HOST ROOT SUBDIR BUFFER TAG)` function that runs one `compile`. *How* a
+command becomes a command line is the project's **build architecture**: the
+generic `quite-build-command` dispatches on the project's
+`:build-architecture` symbol, defaulting to `git-project`.
+
+- `git-project` — runs `"PREFIX git GIT-NAME COMMAND TAG POSTFIX"`. What quite
+  grew up driving, and still the default.
+- `shell` — runs a command's `:shell-command` verbatim, wrapped in
+  `:command-prefix`/`:command-postfix`. For a project built by its own tooling
+  (a `./check.sh`, make, hatch, cask). It has nowhere to interpolate a tag, so
+  it ignores one.
+
+Teach quite a new architecture by adding a `cl-defmethod` on
+`quite-build-command`; no change to quite itself is needed. Execution is
+ordinary `compile`; quite only assembles the command line and sets the
+directory.
 
 ## Data model
 
 - **Project plist** (argument to `quite-define-project`, also stored in
   `quite--projects` keyed by `:name`):
-  - `:git-name` — the git-project name in the compile command.
   - `:name` — project name (buffer names, Hydra columns, `quite-run` key).
   - `:descriptor` — a `quite-project-descriptors` plist (below).
   - `:prefix-key` — key prefix (after `C-c`) for the bindings.
   - `:target` — target string used in flavor (tag) names.
-  - `:commands` — list of `(:name :command :key)` plists.
-  - `:prefixes` — list of prefix-name strings; **list order = the C-u index**
-    (position 0 = no prefix, 1 = one `C-u`, …).
-  - `:transforms` — list of `(:name :func)` plists; `:func` maps a command key to
-    its variant (e.g. `identity`, `upcase`).
+  - `:commands` — list of `(:name :command :key)` plists. `:command` is the
+    command's **lookup name** — the verb `quite-run`/`quite-run-repo` search for,
+    conventionally `"build"` or `"check"`. The `shell` architecture additionally
+    requires `:shell-command`, the line to run.
+  - `:build-architecture` — *optional* symbol selecting how commands run
+    (`quite-build-command`); defaults to `git-project`.
+  - `:git-name` — the git-project name in the compile command (`git-project`
+    architecture only).
+  - `:prefixes` — *optional* list of prefix-name strings; **list order = the C-u
+    index** (position 0 = no prefix, 1 = one `C-u`, …). Omit for a project with a
+    single build flavor.
+  - `:transforms` — *optional* list of `(:name :func)` plists; `:func` maps a
+    command key to its variant (e.g. `identity`, `upcase`). Defaults to one
+    unnamed identity transform. Flavor names drop absent components, so omitting
+    either dimension shortens the tag rather than leaving a stray hyphen.
   - `:command-prefix` / `:command-postfix` — optional shell text around the
     compile command (e.g. activating a venv).
 - **Descriptor plist** (`quite-project-descriptors`): `:project-dir`,
@@ -98,12 +120,16 @@ Both bottom out in `quite--make-build-command`, which returns a
   `quite-remote-create-remote-path`, `quite-remote-localhost`,
   `quite-project-find-project`.
 - **Dispatch:** `quite-generate-dispatcher`, `quite-generate-buffer-dispatcher`.
+- **Build architectures:** `quite-build-command` (generic; `cl-defmethod` on a
+  `:build-architecture` symbol to add one). Built in: `git-project`, `shell`.
 - **Config (defcustom):** `quite-descriptors`, `quite-project-descriptors`,
   `quite-flavor-abbreviations` (regexp→replacement, shortens Hydra head labels).
 
 ## Important internals
 
-- `quite--make-build-command` — the command builder (used by both surfaces).
+- `quite--project-build-command` — resolves a project's architecture and returns
+  the command builder (used by both surfaces); `quite--make-build-command` is the
+  `git-project` architecture's builder.
 - `quite--dispatch` / `quite--prefix-arg-index` — prefix-argument → flavor index
   (nil/0 → #1, 4 → #2, 16 → #3, …).
 - `quite--run-in-buffer-context` / `quite--generate-buffer-action` /

@@ -16,6 +16,8 @@ The dormant package woke up and matured into a shippable tool. The build-composi
 - Added the headless `quite-run` entry, a `quite--projects` registry, an optional flavor `TAG` argument, and repo-keyed `quite-register-repo`/`quite-run-repo` — quite's side of the gaffer build-backend contract.
 - Fixed `quite-project-find-project` returning nil even on a successful root-list/remote hit.
 - Wrote a usage README with a package comparison, an Architecture section with a Mermaid diagram, a developer CONTRIBUTING, and self-playing demo GIFs.
+- Made the build architecture pluggable: a project's `:build-architecture` selects a method of the new generic `quite-build-command`, with `git-project` the default and a bundled `shell` architecture running a command's `:shell-command`. A project built by its own tooling is now an ordinary quite project rather than one quite must be kept away from.
+- Made `:prefixes` and `:transforms` optional, and dropped absent components from flavor names, so a project with a single build flavor is named by `:target` alone.
 
 ## 2021
 

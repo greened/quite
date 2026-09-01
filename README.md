@@ -102,7 +102,7 @@ flowchart TB
     MAP["quite-command-map<br/>+ Hydra heads"]
     RUN["quite-run<br/>NAME COMMAND [DIR BUFFER]"]
     CTX["host/root from buffer<br/>remote-host · find-project"]
-    CMD["quite--make-build-command<br/>→ compile"]
+    CMD["quite-build-command<br/>(architecture) → compile"]
     DEF --> REG
     DEF --> MAP
     REG --> RUN

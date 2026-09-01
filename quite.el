@@ -5,6 +5,7 @@
 ;; Author: David Greene <greened@obbligato.org>
 ;; Keywords: processes, tools
 ;; Version: 0.0.1
+;; Package-Requires: ((emacs "28.1"))
 ;; URL: http://github.com/greened/quite
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -41,6 +42,7 @@
 ;; function.
 
 ;;; Code:
+(require 'cl-lib)
 (require 'compile)
 (require 'seq)
 
@@ -477,6 +479,74 @@ The returned function has the quite command signature
     (lambda (_host _root _subdir _buffer tag)
       (compile (format template command tag)))))
 
+;; A project's build architecture -- how its commands actually run -- is a
+;; symbol dispatched on here, not something quite hard-codes.  git-project is
+;; the default because that is what quite grew up driving, but a project built
+;; by its own tooling (a ./check.sh, make, hatch, cask) supplies its own method
+;; rather than being bent through the git-project command template.
+(cl-defgeneric quite-build-command (architecture command project)
+  "Return the build function for COMMAND in PROJECT under ARCHITECTURE.
+COMMAND is one of PROJECT's :commands plists and PROJECT is the project
+plist (see `quite-define-project').  The returned function has the quite
+command signature \(HOST ROOT SUBDIR BUFFER TAG) and starts exactly one
+`compile'.  Dispatch is on PROJECT's :build-architecture symbol; add a
+method to teach quite a build architecture it does not know.")
+
+(cl-defmethod quite-build-command ((_architecture (eql 'git-project))
+                                   command project)
+  "Return a function compiling COMMAND through git-project.
+quite's default architecture: \"PREFIX git GIT-NAME COMMAND TAG POSTFIX\"."
+  (quite--make-build-command (plist-get command :command)
+                             (plist-get project :git-name)
+                             (plist-get project :command-prefix)
+                             (plist-get project :command-postfix)))
+
+(cl-defmethod quite-build-command ((_architecture (eql 'shell))
+                                   command project)
+  "Return a function compiling COMMAND's :shell-command as a shell command.
+For a project built by its own tooling rather than by git-project.  The
+line is wrapped in PROJECT's :command-prefix and :command-postfix, empty
+components omitted.  The build tag is ignored: there is nothing to
+interpolate it into.
+
+COMMAND's :command stays its lookup name -- the verb `quite-run' and
+`quite-run-repo' search for -- so the line to run must be given
+separately, as :shell-command."
+  (let* ((line-to-run (or (plist-get command :shell-command)
+                          (error "quite: command %S has no :shell-command"
+                                 (plist-get command :command))))
+         (parts (seq-remove (lambda (part) (or (null part) (equal part "")))
+                            (list (plist-get project :command-prefix)
+                                  line-to-run
+                                  (plist-get project :command-postfix))))
+         (line (mapconcat #'identity parts " ")))
+    (lambda (_host _root _subdir _buffer _tag)
+      (compile line))))
+
+(cl-defmethod quite-build-command (architecture command project)
+  "Signal that ARCHITECTURE is not a build architecture quite knows.
+The catch-all method, so a mistyped :build-architecture names itself
+instead of surfacing as a `cl-no-applicable-method' dump of COMMAND and
+PROJECT."
+  (ignore command project)
+  (error "quite: unknown build architecture %S" architecture))
+
+(defun quite--project-build-command (command project)
+  "Return the build function for COMMAND in PROJECT.
+Dispatches `quite-build-command' on PROJECT's :build-architecture,
+defaulting to `git-project' so a project that predates architectures keeps
+its behavior."
+  (quite-build-command (or (plist-get project :build-architecture)
+                           'git-project)
+                       command project))
+
+(defun quite--project-transforms (project)
+  "Return PROJECT's :transforms, or a single identity transform when absent.
+A project with one build flavor needs no command-key variants, so it need
+not spell one out."
+  (or (plist-get project :transforms)
+      (list (list :name "" :func #'identity))))
+
 (defun quite--make-buffer-name (project-name name)
   "Return a function naming the compilation buffer for build NAME.
 The returned function has the quite command signature
@@ -513,12 +583,22 @@ nil no abbreviation is done.  Projects/overlays typically set this."
 ;; deliberately no explicit index field.
 (defun quite--project-flavors (target transform-name prefixes)
   "Return the ordered list of flavor (tag) names for TARGET and TRANSFORM-NAME.
-One flavor is produced per plist in PREFIXES, named
+One flavor is produced per prefix name in PREFIXES, named
 \"TARGET-PREFIXNAME-TRANSFORMNAME\".  List order is significant: it is
-the prefix-argument dispatch order."
+the prefix-argument dispatch order.
+
+Either dimension may be absent -- a project need not have prefixes, and
+`quite--project-transforms' supplies an unnamed transform when a project
+declares none.  Empty components are dropped rather than joined, so a
+project with neither is named by TARGET alone instead of \"TARGET--\", and
+one with only prefixes gives \"TARGET-PREFIXNAME\".  A flavor name is the
+build tag, so a stray hyphen is a wrong target, not a cosmetic flaw."
   (mapcar (lambda (prefix)
-            (format "%s-%s-%s" target prefix transform-name))
-          prefixes))
+            (mapconcat #'identity
+                       (seq-remove (lambda (part) (or (null part) (equal part "")))
+                                   (list target prefix transform-name))
+                       "-"))
+          (or prefixes (list nil))))
 
 (defun quite--project-command-key (command transform)
   "Return the variant key string for COMMAND under TRANSFORM.
@@ -535,10 +615,7 @@ identically by `quite-bind-project-commands' and
   (let ((flavors (quite--project-flavors (plist-get project :target)
                                          (plist-get transform :name)
                                          (plist-get project :prefixes)))
-        (build-func (quite--make-build-command (plist-get command :command)
-                                               (plist-get project :git-name)
-                                               (plist-get project :command-prefix)
-                                               (plist-get project :command-postfix)))
+        (build-func (quite--project-build-command command project))
         (buffer-name-func (quite--make-buffer-name (plist-get project :name)
                                                    (plist-get command :name))))
     (quite-generate-buffer-dispatcher
@@ -564,7 +641,7 @@ Independent of
 `quite-define-project'."
   (let ((prefix-key (plist-get project :prefix-key)))
     (dolist (command (plist-get project :commands))
-      (dolist (transform (plist-get project :transforms))
+      (dolist (transform (quite--project-transforms project))
         (define-key quite-command-map
                     (kbd (concat prefix-key
                                  (quite--project-command-key command transform)))
@@ -583,7 +660,7 @@ it builds its own dispatchers and does not depend on
         (prefixes (plist-get project :prefixes))
         (heads nil))
     (dolist (command (plist-get project :commands))
-      (dolist (transform (plist-get project :transforms))
+      (dolist (transform (quite--project-transforms project))
         (let* ((flavors (quite--project-flavors target (plist-get transform :name)
                                                 prefixes))
                (description (mapconcat #'identity
@@ -608,15 +685,26 @@ Binds every command via `quite-bind-project-commands' and returns the
 heads from `quite-project-hydra-heads'.  Usual entry point for overlays.
 
 PROJECT is a plist:
-  :git-name        git-project name for the compile command
   :name            project name (buffer names, hydra columns)
   :descriptor      a `quite-project-descriptors' plist
   :prefix-key      key prefix inserted after \"C-c \"
   :target          target string used in flavor (tag) names
-  :commands        list of (:name :command :key) plists
-  :prefixes        list of prefix-name strings; list ORDER is the C-u index
-                   (position 0 = no prefix, 1 = one C-u, 2 = two C-u, ...)
-  :transforms      list of (:name :func) plists (:func maps a command key)
+  :commands        list of (:name :command :key) plists.  :command is the
+                   command's lookup name -- the verb `quite-run' and
+                   `quite-run-repo' search for, conventionally \"build\" or
+                   \"check\".  The `shell' architecture additionally requires
+                   a :shell-command giving the line to run
+  :build-architecture
+                   optional symbol naming how the commands run, dispatched
+                   by `quite-build-command'; defaults to `git-project'
+  :git-name        git-project name for the compile command (the
+                   `git-project' architecture only)
+  :prefixes        optional list of prefix-name strings; list ORDER is the
+                   C-u index (position 0 = no prefix, 1 = one C-u, ...).
+                   Omit it for a project with a single build flavor, which
+                   is then named by :target alone
+  :transforms      optional list of (:name :func) plists (:func maps a
+                   command key); defaults to a single identity transform
   :command-prefix  optional shell text before the compile command
   :command-postfix optional shell text after the compile command"
   (setf (alist-get (plist-get project :name) quite--projects nil nil #'equal)
@@ -634,7 +722,11 @@ visible compilation buffer.  BUFFER-NAME, when given, names that buffer (so a
 caller can make it unique per checkout); otherwise the usual `compile' default
 applies.  TAG, when given, is the exact build tag passed to the tool -- a full
 flavor string such as \"tools-devrel-cluster\"; otherwise the project's
-:target stem is used.  Returns the compilation buffer.
+:target stem is used.  What a tag means is the build architecture's
+business: the `git-project' architecture interpolates it into the command,
+while `shell' has nowhere to put it and ignores it, so a `shell' project's
+build and test targets differ only in which :commands entry runs.  Returns
+the compilation buffer.
 
 A headless entry point -- no hydra, keymap, or file-visiting buffer required --
 for tools (e.g. gaffer) that drive a project build programmatically.  It reuses
@@ -646,11 +738,7 @@ should pass TAG (the bare :target stem is used otherwise)."
          (cmd (or (seq-find (lambda (c) (equal (plist-get c :command) command))
                             (plist-get project :commands))
                   (error "quite: project %S has no command %S" name command)))
-         (build-func (quite--make-build-command
-                      (plist-get cmd :command)
-                      (plist-get project :git-name)
-                      (plist-get project :command-prefix)
-                      (plist-get project :command-postfix)))
+         (build-func (quite--project-build-command cmd project))
          (default-directory (file-name-as-directory (or dir default-directory)))
          (compilation-buffer-name-function
           (if buffer-name (lambda (&rest _) buffer-name)

@@ -236,6 +236,126 @@
     (funcall (quite--make-build-command "build" "be" "PRE" "POST") "h" "r" "s" "b" "TAG")
     (expect 'compile :to-have-been-called-with "PRE git be build TAG POST")))
 
+(describe "quite-build-command"
+  (it "compiles a git-project command for the git-project architecture"
+    (spy-on 'compile)
+    (funcall (quite-build-command 'git-project
+                                  '(:name "build" :command "build" :key "b")
+                                  '(:git-name "be"))
+             "h" "r" "s" "b" "all-devrel-local")
+    (expect 'compile :to-have-been-called-with " git be build all-devrel-local "))
+  (it "runs the :shell-command verbatim for the shell architecture"
+    (spy-on 'compile)
+    (funcall (quite-build-command 'shell
+                                  '(:name "check" :command "check" :key "k"
+                                          :shell-command "hatch run test")
+                                  '(:name "widget"))
+             "h" "r" "s" "b" "TAG")
+    (expect 'compile :to-have-been-called-with "hatch run test"))
+  (it "rejects a shell command with no :shell-command rather than running its name"
+    (expect (quite-build-command 'shell '(:name "check" :command "check")
+                                 '(:name "widget"))
+            :to-throw 'error))
+  (it "wraps a shell command in PREFIX and POSTFIX, omitting empty ones"
+    (spy-on 'compile)
+    (funcall (quite-build-command 'shell '(:command "check" :shell-command "make test")
+                                  '(:command-prefix "PRE" :command-postfix "POST"))
+             "h" "r" "s" "b" "TAG")
+    (expect 'compile :to-have-been-called-with "PRE make test POST"))
+  (it "ignores the build tag for the shell architecture"
+    (spy-on 'compile)
+    (let ((build-func (quite-build-command
+                       'shell '(:command "check" :shell-command "./check.sh") nil)))
+      (funcall build-func "h" "r" "s" "b" "one")
+      (funcall build-func "h" "r" "s" "b" "two"))
+    (expect 'compile :to-have-been-called-with "./check.sh")
+    (expect (spy-calls-count 'compile) :to-equal 2))
+  (it "names an unknown architecture instead of failing on dispatch"
+    (expect (quite-build-command 'hatchling '(:command "build") '(:name "widget"))
+            :to-throw 'error)))
+
+(describe "quite--project-build-command"
+  (it "defaults to the git-project architecture when none is given"
+    (spy-on 'compile)
+    (funcall (quite--project-build-command '(:command "build")
+                                           '(:git-name "be" :target "all"))
+             "h" "r" "s" "b" "TAG")
+    (expect 'compile :to-have-been-called-with " git be build TAG "))
+  (it "honors an explicit :build-architecture"
+    (spy-on 'compile)
+    (funcall (quite--project-build-command '(:command "check"
+                                             :shell-command "make test")
+                                           '(:build-architecture shell))
+             "h" "r" "s" "b" "TAG")
+    (expect 'compile :to-have-been-called-with "make test")))
+
+(describe "quite--project-flavors dimension combinations"
+  ;; A flavor name IS the build tag, so an empty component joined in is a
+  ;; wrong target rather than a cosmetic flaw.  All four combinations of the
+  ;; two optional dimensions have to name distinct, well-formed flavors.
+  (it "joins both dimensions when both are present"
+    (expect (quite--project-flavors "all" "local" '("devrel" "devdbg"))
+            :to-equal '("all-devrel-local" "all-devdbg-local")))
+  (it "omits the transform when it is unnamed, leaving no trailing hyphen"
+    (expect (quite--project-flavors "all" "" '("devrel" "devdbg"))
+            :to-equal '("all-devrel" "all-devdbg")))
+  (it "keeps transforms distinct when there are no prefixes"
+    (expect (append (quite--project-flavors "widget" "local" nil)
+                    (quite--project-flavors "widget" "cluster" nil))
+            :to-equal '("widget-local" "widget-cluster")))
+  (it "names the flavor by the target alone when neither dimension is given"
+    (expect (quite--project-flavors "widget" "" nil) :to-equal '("widget"))))
+
+(describe "a shell project end to end"
+  ;; The point of the architecture seam: a project built by its own tooling,
+  ;; declaring neither :prefixes nor :transforms, is a first-class project.
+  (let ((project '(:name "widget"
+                   :build-architecture shell
+                   :descriptor (:project-dir "widget" :root-list ("/w"))
+                   :prefix-key "w"
+                   :target "widget"
+                   :commands ((:name "build" :command "build" :key "b"
+                                     :shell-command "hatch build")
+                              (:name "check" :command "check" :key "k"
+                                     :shell-command "hatch run test")))))
+    (it "produces one hydra head per command, described by the bare target"
+      (let ((heads (quite-project-hydra-heads project)))
+        (expect (length heads) :to-equal 2)
+        (expect (mapcar #'car heads) :to-equal '("b" "k"))
+        (expect (nth 2 (car heads)) :to-equal "widget")))
+    (it "binds each command at its prefix key with no variant"
+      (let ((quite-command-map (make-sparse-keymap)))
+        (quite-bind-project-commands project)
+        (expect (keymapp (lookup-key quite-command-map (kbd "w"))) :to-be-truthy)
+        (expect (commandp (lookup-key quite-command-map (kbd "w b"))) :to-be-truthy)
+        (expect (commandp (lookup-key quite-command-map (kbd "w k"))) :to-be-truthy)))
+    (it "runs the command's :shell-command headlessly via quite-run"
+      (spy-on 'compile)
+      (let ((quite--projects nil))
+        (quite-define-project project)
+        (quite-run "widget" "check" "/w/widget"))
+      (expect 'compile :to-have-been-called-with "hatch run test"))
+    (it "runs build and check differently despite sharing one flavor"
+      (spy-on 'compile)
+      (let ((quite--projects nil))
+        (quite-define-project project)
+        (quite-run "widget" "build" "/w/widget")
+        (quite-run "widget" "check" "/w/widget"))
+      (expect (spy-calls-count 'compile) :to-equal 2)
+      (expect (spy-calls-args-for 'compile 0) :to-equal '("hatch build"))
+      (expect (spy-calls-args-for 'compile 1) :to-equal '("hatch run test")))))
+
+(describe "quite--project-transforms"
+  (it "returns the project's transforms when present"
+    (let ((transforms '((:name "local" :func identity))))
+      (expect (quite--project-transforms (list :transforms transforms))
+              :to-equal transforms)))
+  (it "defaults to a single identity transform when absent"
+    (let ((transforms (quite--project-transforms '(:name "quite"))))
+      (expect (length transforms) :to-equal 1)
+      (expect (plist-get (car transforms) :name) :to-equal "")
+      (expect (funcall (plist-get (car transforms) :func) "k") :to-equal "k"))))
+
 (describe "quite--make-buffer-name"
   (it "names the buffer, shortening the host to its first dotted component"
     (expect (funcall (quite--make-buffer-name "clang" "build")
