@@ -50,7 +50,22 @@
     (expect (quite-remote--strip-host "/ssh:dg@dev-vm.example.com:/srv/x")
             :to-equal "/srv/x"))
   (it "leaves a plain local path unchanged"
-    (expect (quite-remote--strip-host "/path/to/test") :to-equal "/path/to/test")))
+    (expect (quite-remote--strip-host "/path/to/test") :to-equal "/path/to/test"))
+  (it "strips a prefix naming a non-default method"
+    (let ((quite-remote-method "sshx"))
+      (expect (quite-remote--strip-host "/sshx:me@myhost:/path/to/test")
+              :to-equal "/path/to/test")))
+  (it "leaves a prefix naming some other method unchanged"
+    (let ((quite-remote-method "sshx"))
+      (expect (quite-remote--strip-host "/ssh:myhost:/path/to/test")
+              :to-equal "/ssh:myhost:/path/to/test"))))
+
+(describe "quite-remote--prefix"
+  (it "builds a prefix from the default method"
+    (expect (quite-remote--prefix "myhost") :to-equal "/ssh:myhost:"))
+  (it "builds a prefix from a configured method"
+    (let ((quite-remote-method "docker"))
+      (expect (quite-remote--prefix "myhost") :to-equal "/docker:myhost:"))))
 
 (describe "quite--prefix-arg-index"
   (it "maps no prefix (nil) to index 0"
@@ -94,7 +109,11 @@
 (describe "quite-remote-create-remote-path"
   (it "builds an /ssh: path for a host"
     (expect (quite-remote-create-remote-path "myhost" "/path/to/x")
-            :to-equal "/ssh:myhost:/path/to/x")))
+            :to-equal "/ssh:myhost:/path/to/x"))
+  (it "names the configured method in the prefix"
+    (let ((quite-remote-method "sshx"))
+      (expect (quite-remote-create-remote-path "myhost" "/path/to/x")
+              :to-equal "/sshx:myhost:/path/to/x"))))
 
 (describe "quite--doit"
   (it "funcalls FUNC with TAG"
@@ -202,6 +221,15 @@
             (lambda (p) (equal p "/ssh:remote:/work/project/Makefile")))
     (expect (quite-project-find-project "project" "remote" '("/work") '("Makefile"))
             :to-equal "/work/project"))
+  (it "uses the configured method in the remote check"
+    (spy-on 'quite-project--path-for-buffer :and-return-value nil)
+    (spy-on 'system-name :and-return-value "localbox")
+    (spy-on 'file-exists-p :and-call-fake
+            (lambda (p) (equal p "/sshx:remote:/work/project/Makefile")))
+    (let ((quite-remote-method "sshx"))
+      (expect (quite-project-find-project "project" "remote" '("/work")
+                                          '("Makefile"))
+              :to-equal "/work/project")))
   (it "errors when the project cannot be found"
     (spy-on 'quite-project--path-for-buffer :and-return-value nil)
     (spy-on 'system-name :and-return-value "localbox")

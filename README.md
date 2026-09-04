@@ -84,6 +84,17 @@ Execution itself is ordinary `compile`, so remoteness is carried by
 `default-directory`/TRAMP. `quite`'s job is to *point it at the right host and
 root* and to organize the command matrix.
 
+When `quite` builds a remote path itself, it uses the TRAMP method named by
+`quite-remote-method`, which defaults to `ssh`. Set it to reach your hosts
+another way:
+
+```elisp
+(setq quite-remote-method "sshx")
+```
+
+The method has to form a prefix from a host name alone, as `/method:host:` does.
+A method that also needs a port or a hop is a TODO limitation.
+
 ## Architecture
 
 quite defines your projects and exposes them two ways. One is an **interactive**

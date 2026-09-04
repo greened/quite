@@ -123,13 +123,18 @@ directory.
 - **Build architectures:** `quite-build-command` (generic; `cl-defmethod` on a
   `:build-architecture` symbol to add one). Built in: `git-project`, `shell`.
 - **Config (defcustom):** `quite-descriptors`, `quite-project-descriptors`,
-  `quite-flavor-abbreviations` (regexp→replacement, shortens Hydra head labels).
+  `quite-flavor-abbreviations` (regexp→replacement, shortens Hydra head labels),
+  `quite-remote-method` (TRAMP method for a remote host, default `ssh`).
 
 ## Important internals
 
 - `quite--project-build-command` — resolves a project's architecture and returns
   the command builder (used by both surfaces); `quite--make-build-command` is the
   `git-project` architecture's builder.
+- `quite-remote--prefix` — the one place a `/method:host:` prefix is built, from
+  `quite-remote-method`. `quite-remote--strip-host` builds its regexp from the
+  same variable, so it only strips a prefix quite would have written. Add no
+  second literal method anywhere.
 - `quite--dispatch` / `quite--prefix-arg-index` — prefix-argument → flavor index
   (nil/0 → #1, 4 → #2, 16 → #3, …).
 - `quite--run-in-buffer-context` / `quite--generate-buffer-action` /

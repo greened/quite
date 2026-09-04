@@ -91,6 +91,18 @@ invoked with the current buffer to determine the host."
 		     (:function function))))
   :group 'quite-project)
 
+;;;###autoload
+(defcustom quite-remote-method "ssh"
+  "TRAMP method quite uses to reach a remote build host.
+
+The value is a method name as it appears in `tramp-methods', without
+the surrounding slash and colon.  quite builds a remote path as
+/METHOD:HOST:/path, and recognizes that same form when it strips a
+prefix back off.  A method whose prefix needs more than a host name,
+such as one carrying a port or a hop, is not supported."
+  :type 'string
+  :group 'quite)
+
 ;;; Implementation
 
 (defvar quite-remote--host-list nil)
@@ -99,11 +111,16 @@ invoked with the current buffer to determine the host."
   "Prompt the user for a host, with completion."
   (quite--read-string "Host: " 'quite-remote--host-list))
 
+(defun quite-remote--prefix (host)
+  "Return the TRAMP prefix that reaches HOST via `quite-remote-method'."
+  (concat "/" quite-remote-method ":" host ":"))
+
 (defun quite-remote--strip-host (path)
-  "Remove the method/host prefix from PATH if present."
-  ;; FIXME: Don't hard-code the method.
+  "Remove the method/host prefix from PATH if present.
+Only a prefix naming `quite-remote-method' is removed."
   (replace-regexp-in-string
-   "^\\(/ssh:\\([-._[:alnum:]]+@\\)?[-._[:alnum:]]+:\\)"
+   (concat "^\\(/" (regexp-quote quite-remote-method)
+	   ":\\([-._[:alnum:]]+@\\)?[-._[:alnum:]]+:\\)")
    ""
    path))
 
@@ -236,9 +253,8 @@ is a path on the remote HOST, without the remote prefix."
          (quite-project--path-for-buffer project-dir key-files)))
     (if (not the-root)
         (let ((remote-prefix
-               ;; FIXME: Don't hard-code method.
                (when (not (string-equal host (system-name)))
-                 (concat "/ssh:" host ":"))))
+                 (quite-remote--prefix host))))
           (let ((found-root
                  (catch 'found
                    (dolist (root root-list)
@@ -378,9 +394,9 @@ generating function will be substituted.  For example:
 
 ;;;###autoload
 (defun quite-remote-create-remote-path (host path)
-  "Take local path PATH and create a remote path for it on HOST."
-  ;; FIXME: Don't hard-code the method.
-  (concat "/ssh:" host ":" path))
+  "Take local path PATH and create a remote path for it on HOST.
+The prefix names `quite-remote-method'."
+  (concat (quite-remote--prefix host) path))
 
 ;;;###autoload
 (defun quite-remote-host-for-current-buffer (prompt default-host-func)
