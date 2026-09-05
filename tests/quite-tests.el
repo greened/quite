@@ -257,8 +257,8 @@
 (describe "quite--make-build-command"
   (it "compiles \"git PROJECT COMMAND TAG\""
     (spy-on 'compile)
-    (funcall (quite--make-build-command "build" "be") "h" "r" "s" "b" "all-devrel-local")
-    (expect 'compile :to-have-been-called-with " git be build all-devrel-local "))
+    (funcall (quite--make-build-command "build" "be") "h" "r" "s" "b" "all-release-local")
+    (expect 'compile :to-have-been-called-with " git be build all-release-local "))
   (it "wraps the command in PREFIX and POSTFIX"
     (spy-on 'compile)
     (funcall (quite--make-build-command "build" "be" "PRE" "POST") "h" "r" "s" "b" "TAG")
@@ -270,8 +270,8 @@
     (funcall (quite-build-command 'git-project
                                   '(:name "build" :command "build" :key "b")
                                   '(:git-name "be"))
-             "h" "r" "s" "b" "all-devrel-local")
-    (expect 'compile :to-have-been-called-with " git be build all-devrel-local "))
+             "h" "r" "s" "b" "all-release-local")
+    (expect 'compile :to-have-been-called-with " git be build all-release-local "))
   (it "runs the :shell-command verbatim for the shell architecture"
     (spy-on 'compile)
     (funcall (quite-build-command 'shell
@@ -322,11 +322,11 @@
   ;; wrong target rather than a cosmetic flaw.  All four combinations of the
   ;; two optional dimensions have to name distinct, well-formed flavors.
   (it "joins both dimensions when both are present"
-    (expect (quite--project-flavors "all" "local" '("devrel" "devdbg"))
-            :to-equal '("all-devrel-local" "all-devdbg-local")))
+    (expect (quite--project-flavors "all" "local" '("release" "debug"))
+            :to-equal '("all-release-local" "all-debug-local")))
   (it "omits the transform when it is unnamed, leaving no trailing hyphen"
-    (expect (quite--project-flavors "all" "" '("devrel" "devdbg"))
-            :to-equal '("all-devrel" "all-devdbg")))
+    (expect (quite--project-flavors "all" "" '("release" "debug"))
+            :to-equal '("all-release" "all-debug")))
   (it "keeps transforms distinct when there are no prefixes"
     (expect (append (quite--project-flavors "widget" "local" nil)
                     (quite--project-flavors "widget" "cluster" nil))
@@ -407,8 +407,8 @@
 
 (describe "quite--project-flavors"
   (it "builds TARGET-PREFIX-TRANSFORM names in prefix order"
-    (expect (quite--project-flavors "all" "local" '("devrel" "devdbg"))
-            :to-equal '("all-devrel-local" "all-devdbg-local"))))
+    (expect (quite--project-flavors "all" "local" '("release" "debug"))
+            :to-equal '("all-release-local" "all-debug-local"))))
 
 (describe "quite--project-command-key"
   (it "applies the transform's :func to the command's :key"
@@ -430,7 +430,7 @@
                 :descriptor '(:project-dir "P" :root-list ("/r") :key-files ("k"))
                 :prefix-key "p" :target "all"
                 :commands '((:name "build" :command "build" :key "b"))
-                :prefixes '("devrel" "devdbg")
+                :prefixes '("release" "debug")
                 :transforms (list (list :name "local" :func #'identity)
                                   (list :name "cluster" :func #'upcase)))))
   (after-each
@@ -470,19 +470,19 @@
       (spy-on 'quite-project-find-key-files-buffer
               :and-return-value (get-buffer-create " *quite-test-buffer*"))
       (spy-on 'compile)
-      (let ((current-prefix-arg nil))     ; no prefix -> first (devrel) flavor
+      (let ((current-prefix-arg nil))     ; no prefix -> first (release) flavor
         (call-interactively (lookup-key quite-command-map (kbd "pb"))))
-      (expect 'compile :to-have-been-called-with " git be build all-devrel-local "))
-    (it "one C-u selects the second (devdbg) flavor"
+      (expect 'compile :to-have-been-called-with " git be build all-release-local "))
+    (it "one C-u selects the second (debug) flavor"
       (quite-bind-project-commands project)
       (spy-on 'quite-remote-host-for-current-buffer :and-return-value "localbox")
       (spy-on 'quite-project-find-project :and-return-value "/r/P")
       (spy-on 'quite-project-find-key-files-buffer
               :and-return-value (get-buffer-create " *quite-test-buffer*"))
       (spy-on 'compile)
-      (let ((current-prefix-arg '(4)))    ; C-u -> second (devdbg) flavor
+      (let ((current-prefix-arg '(4)))    ; C-u -> second (debug) flavor
         (call-interactively (lookup-key quite-command-map (kbd "pb"))))
-      (expect 'compile :to-have-been-called-with " git be build all-devdbg-local "))))
+      (expect 'compile :to-have-been-called-with " git be build all-debug-local "))))
 
 (provide 'quite-tests)
 ;;; quite-tests.el ends here

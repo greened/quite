@@ -52,20 +52,20 @@ remote host. (Example data. The build command is stubbed to echo.)*
 (quite-define-project
  (list :git-name    "be"                       ; git-project sub-command name
        :name        "llvm"                      ; used in buffer names / hydra
-       :descriptor  '(:project-dir "tools"
+       :descriptor  '(:project-dir "llvm-project"
                       :root-list ("~/ws")
                       :key-files ("Makefile"))
        :prefix-key  "r"                          ; keys live under C-c q r ...
-       :target      "tools"               ; used in flavor (tag) names
+       :target      "llvm-project"               ; used in flavor (tag) names
        :commands    '((:name "configure" :command "configure" :key "f")
                       (:name "build"     :command "build"     :key "b"))
-       :prefixes    '("devrel" "devdbg")         ; list ORDER = the C-u index
+       :prefixes    '("release" "debug")         ; list ORDER = the C-u index
        :transforms  (list (list :name "local"   :func #'identity)
                           (list :name "cluster" :func #'upcase))))
 ```
 
-With the above, `C-c q r b` builds `tools`'s `devrel` flavor locally.
-`C-u C-c q r b` builds the `devdbg` flavor. `C-c q r B` (upcased key) builds the
+With the above, `C-c q r b` builds `llvm-project`'s `release` flavor locally.
+`C-u C-c q r b` builds the `debug` flavor. `C-c q r B` (upcased key) builds the
 `cluster` variant, and `C-c q r h` pops the project's build Hydra. If the buffer
 you invoke from is remote, every one of those runs on the remote host instead,
 using the same keys.

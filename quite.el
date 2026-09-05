@@ -737,8 +737,8 @@ build runs -- via `compile', so a remote (TRAMP) DIR builds on that host, in a
 visible compilation buffer.  BUFFER-NAME, when given, names that buffer (so a
 caller can make it unique per checkout); otherwise the usual `compile' default
 applies.  TAG, when given, is the exact build tag passed to the tool -- a full
-flavor string such as \"tools-devrel-cluster\"; otherwise the project's
-:target stem is used.  What a tag means is the build architecture's
+flavor string such as \"llvm-project-release-cluster\"; otherwise the
+project's :target stem is used.  What a tag means is the build architecture's
 business: the `git-project' architecture interpolates it into the command,
 while `shell' has nowhere to put it and ignores it, so a `shell' project's
 build and test targets differ only in which :commands entry runs.  Returns
@@ -764,8 +764,8 @@ should pass TAG (the bare :target stem is used otherwise)."
 (defvar quite--repo-builds nil
   "Alist mapping a repo (\"owner/name\") to a build plist with keys :project (a
 registered quite project NAME), :build-target and :test-target (full build tags,
-e.g. \"tools-devrel-cluster\").  Populated by `quite-register-repo' and
-consulted by `quite-run-repo'.")
+e.g. \"llvm-project-release-cluster\").  Populated by `quite-register-repo'
+and consulted by `quite-run-repo'.")
 
 (defun quite-register-repo (repo &rest plist)
   "Register REPO's headless build details.
