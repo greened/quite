@@ -89,7 +89,7 @@ invoked with the current buffer to determine the host."
 		     (:root-list (repeat string))
 		     (:key-files (repeat string))
 		     (:function function))))
-  :group 'quite-project)
+  :group 'quite)
 
 ;;;###autoload
 (defcustom quite-remote-method "ssh"

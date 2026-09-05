@@ -18,6 +18,7 @@ The dormant package woke up and matured into a shippable tool. The build-composi
 - Wrote a usage README with a package comparison, an Architecture section with a Mermaid diagram, a developer CONTRIBUTING, and self-playing demo GIFs.
 - Made the build architecture pluggable: a project's `:build-architecture` selects a method of the new generic `quite-build-command`, with `git-project` the default and a bundled `shell` architecture running a command's `:shell-command`. A project built by its own tooling is now an ordinary quite project rather than one quite must be kept away from.
 - Made `:prefixes` and `:transforms` optional, and dropped absent components from flavor names, so a project with a single build flavor is named by `:target` alone.
+- Put `quite-project-descriptors` in the `quite` customize group. It named `quite-project`, which no `defgroup` ever defined, so the option did not appear under the package.
 - Replaced the hard-coded `/ssh:` TRAMP method with a `quite-remote-method` defcustom. Remote paths are now built in one place, `quite-remote--prefix`, and `quite-remote--strip-host` derives its regexp from the same variable, so it strips only a prefix quite would have written. A method needing more than a host name in its prefix is still unsupported.
 
 ## 2021
