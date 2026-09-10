@@ -20,6 +20,7 @@ The dormant package woke up and matured into a shippable tool. The build-composi
 - Made `:prefixes` and `:transforms` optional, and dropped absent components from flavor names, so a project with a single build flavor is named by `:target` alone.
 - Put `quite-project-descriptors` in the `quite` customize group. It named `quite-project`, which no `defgroup` ever defined, so the option did not appear under the package.
 - Replaced the hard-coded `/ssh:` TRAMP method with a `quite-remote-method` defcustom. Remote paths are now built in one place, `quite-remote--prefix`, and `quite-remote--strip-host` derives its regexp from the same variable, so it strips only a prefix quite would have written. A method needing more than a host name in its prefix is still unsupported.
+- Rewrote the `;;; Commentary:` header. It promised two functions and named one, broke off mid-sentence, and documented a `C-c C-q` binding the package never had, next to a `quite-dispatch` command it dropped in the 2020 reorganization. It now describes host and root resolution, project descriptors, flavor dispatch, `quite-define-project` and the headless `quite-run` entries. Refreshed the file header alongside it: copyright years, an `https` URL, and version 0.1.0 in place of the 0.0.1 the package long ago outgrew.
 
 ## 2021
 

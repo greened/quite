@@ -1,12 +1,12 @@
-;;; quite.el ---  QUIck Transparent Execution.  -*- lexical-binding: t; -*-
+;;; quite.el --- QUIck Transparent Execution  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2019-2020  David A. Greene
+;; Copyright (C) 2019-2021, 2026  David A. Greene
 
 ;; Author: David Greene <greened@obbligato.org>
 ;; Keywords: processes, tools
-;; Version: 0.0.1
+;; Version: 0.1.0
 ;; Package-Requires: ((emacs "28.1"))
-;; URL: http://github.com/greened/quite
+;; URL: https://github.com/greened/quite
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -23,23 +23,39 @@
 
 ;;; Commentary:
 
-;; This package provides two functions.  The first, lower-level function is
-;; quite-execute.
+;; quite runs a project's build and development commands on the host where the
+;; file you edit lives.  That host is the local machine when the current buffer
+;; visits a local file, and a remote host over TRAMP when it visits a remote
+;; file.  quite works out the host and the project root from the current
+;; buffer, then runs the command there with `compile', in a predictably named
+;; compilation buffer.
 
-;; among a list of commands to run based on the given prefix argument.
-;; For example C-u C-u M-x `quite-dispatch' will run the second
-;; command in the list.  C-u 3 M-x `quite-dispatch' will run the third
-;; command, as will C-u C-u C-u M-x `quite-dispatch'.
-;;
-;; While this is mostly intended to be used as a library to invoke
-;; from interactive commands, it is possible to set up a default list
-;; of commands and invoke execution via C-c C-q (`quite-execute').
-;;
-;; `quite-dispatch' will pass the prefix argument and the host
-;; associated with the curent buffer.  The host is either a remote
-;; host if the buffer is associated with a remote, the local host if
-;; the buffer is local or a host determined by a default-providing
-;; function.
+;; A project descriptor says where a project lives.  It names a
+;; `:project-dir', a `:root-list' of directories to search on the resolved
+;; host, and the `:key-files' whose presence marks a real project root.  See
+;; `quite-project-descriptors'.
+
+;; The prefix argument selects a command flavor.  Each command is bound once.
+;; No prefix runs the first flavor, C-u runs the second, C-u C-u runs the
+;; third, and so on.  quite passes the chosen flavor's tag to the command it
+;; runs.
+
+;; `quite-define-project' is the usual entry point.  It composes a project's
+;; commands, transforms and flavors into bindings in `quite-command-map', and
+;; it returns hydra heads for those same commands.  Bind `quite-command-map'
+;; to a prefix key yourself; quite claims no key of its own.  A project's
+;; `:build-architecture' decides how its commands actually run.  The symbol
+;; selects a method of `quite-build-command', and quite bundles two of them:
+;; `git-project' and `shell'.
+
+;; `quite-run' is the headless entry point.  It runs one command of a
+;; registered project in a given directory.  It needs no keymap, no hydra and
+;; no file-visiting buffer.  `quite-register-repo' and `quite-run-repo' key
+;; the same path by repository name, for a driver that knows repositories
+;; rather than quite's project model.
+
+;; `quite-execute' is the older low-level path.  It dispatches on the prefix
+;; argument among the entries of `quite-descriptors'.
 
 ;;; Code:
 (require 'cl-lib)
