@@ -6,3 +6,6 @@
 
 # Cask package output.
 /dist/
+
+# Editor backups.
+*~
