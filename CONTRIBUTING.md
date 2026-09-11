@@ -50,8 +50,9 @@ flowchart TB
    `quite-command-map` (via `quite-bind-project-commands`) and (b) Hydra heads
    (via `quite-project-hydra-heads`). Interactive: the raw prefix argument selects
    a *flavor* (`quite--prefix-arg-index` / `quite--dispatch`), and the command
-   runs in a named compilation buffer whose host/root come from the **current
-   buffer** (`quite-remote-host-for-current-buffer`, `quite-project-find-project`).
+   runs in a named compilation buffer whose connection/root come from the
+   **current buffer** (`quite-remote-connection-for-current-buffer`,
+   `quite-project-find-project`).
 2. **`quite-run` (headless)** — `quite-run NAME COMMAND &optional DIR BUFFER-NAME`
    looks the project up in `quite--projects`, builds the command with
    `quite--project-build-command`, and runs it via `compile` in `DIR` (a remote DIR
@@ -60,7 +61,10 @@ flowchart TB
    same build command as the matrix, so headless and interactive builds match.
 
 Both bottom out in `quite--project-build-command`, which returns a
-`(HOST ROOT SUBDIR BUFFER TAG)` function that runs one `compile`. *How* a
+`(CONNECTION ROOT SUBDIR BUFFER TAG)` function that runs one `compile`.
+CONNECTION is nil for local, or a TRAMP prefix such as `/ssh:me@host#2222:` —
+**not** a bare host, which could not tell a user, port, method or hop apart.
+*How* a
 command becomes a command line is the project's **build architecture**: the
 generic `quite-build-command` dispatches on the project's
 `:build-architecture` symbol, defaulting to `git-project`.
@@ -116,25 +120,35 @@ directory.
 - **Define / run:** `quite-define-project` (usual overlay entry point),
   `quite-run` (headless), `quite-execute` (prefix-dispatch over
   `quite-descriptors`), `quite-bind-project-commands`, `quite-project-hydra-heads`.
-- **Host/root:** `quite-remote-host-for-current-buffer`,
-  `quite-remote-create-remote-path`, `quite-remote-localhost`,
+- **Connection/root:** `quite-remote-connection-for-current-buffer`,
+  `quite-remote-connection`, `quite-remote-path`, `quite-remote-localname`,
+  `quite-remote-display-host`, `quite-remote-localhost` (returns nil = local),
   `quite-project-find-project`.
 - **Dispatch:** `quite-generate-dispatcher`, `quite-generate-buffer-dispatcher`.
 - **Build architectures:** `quite-build-command` (generic; `cl-defmethod` on a
   `:build-architecture` symbol to add one). Built in: `git-project`, `shell`.
 - **Config (defcustom):** `quite-descriptors`, `quite-project-descriptors`,
   `quite-flavor-abbreviations` (regexp→replacement, shortens Hydra head labels),
-  `quite-remote-method` (TRAMP method for a remote host, default `ssh`).
+  `quite-remote-method` (TRAMP method used ONLY when quite must invent a
+  prefix, i.e. the buffer visits no file; default `ssh`).
 
 ## Important internals
 
 - `quite--project-build-command` — resolves a project's architecture and returns
   the command builder (used by both surfaces); `quite--make-build-command` is the
   `git-project` architecture's builder.
-- `quite-remote--prefix` — the one place a `/method:host:` prefix is built, from
-  `quite-remote-method`. `quite-remote--strip-host` builds its regexp from the
-  same variable, so it only strips a prefix quite would have written. Add no
-  second literal method anywhere.
+- `quite-remote--prefix` — the one place a `/method:host:` prefix is built,
+  from `quite-remote-method`. It is reached only when there is no buffer prefix
+  to copy. Add no second literal method anywhere.
+- `quite-remote-connection` / `quite-remote-localname` — the connection
+  round-trip. Extraction prefers the literal prefix (path minus localname),
+  guarded by `string-suffix-p` and falling back to `file-remote-p`; stripping
+  is `file-local-name`, so it handles any method, user, port or hop. Never
+  reintroduce a hand-written prefix regexp: the old one silently failed on a
+  `#port`, because `#` fell outside its character class.
+- `quite--connection-token` — buffer-name identity. Hashes the WHOLE connection
+  string, because a host alone cannot separate two users, ports, methods or
+  hops, and two builds sharing a buffer name share one process.
 - `quite--dispatch` / `quite--prefix-arg-index` — prefix-argument → flavor index
   (nil/0 → #1, 4 → #2, 16 → #3, …).
 - `quite--run-in-buffer-context` / `quite--generate-buffer-action` /

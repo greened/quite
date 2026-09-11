@@ -74,7 +74,7 @@ using the same keys.
 
 | Function | Role |
 |---|---|
-| `quite-remote-host-for-current-buffer` | resolves local vs. remote host from the buffer |
+| `quite-remote-connection-for-current-buffer` | resolves the buffer's TRAMP connection, nil for local |
 | `quite-project-find-project` | finds the project root on that host (buffer-relative or by searching `:root-list`) |
 | `quite--dispatch` / `quite--prefix-arg-index` | maps the raw prefix argument to a flavor index |
 | `quite-generate-buffer-dispatcher` | builds the interactive command that runs a flavor in a named buffer |
@@ -84,16 +84,39 @@ Execution itself is ordinary `compile`, so remoteness is carried by
 `default-directory`/TRAMP. `quite`'s job is to *point it at the right host and
 root* and to organize the command matrix.
 
-When `quite` builds a remote path itself, it uses the TRAMP method named by
-`quite-remote-method`, which defaults to `ssh`. Set it to reach your hosts
-another way:
+When the current buffer visits a file, `quite` copies **that file's own TRAMP
+prefix** and uses it verbatim. Whatever the buffer already reached — a method,
+a user, a port — is what the build reaches. So `/ssh:me@host#2222:/src/f.c`
+builds as `me` on port `2222`, and nothing needs configuring.
+
+`quite-remote-method` applies only where there is no name to copy: the buffer
+visits no file, so the host comes from a prompt or from a descriptor's
+`:default-host-func`. It defaults to `ssh`:
 
 ```elisp
 (setq quite-remote-method "sshx")
 ```
 
-The method has to form a prefix from a host name alone, as `/method:host:` does.
-A method that also needs a port or a hop is a TODO limitation.
+### Hops
+
+A hop is TRAMP's business, not `quite`'s, and how far an inline `|` hop
+survives depends on your Emacs:
+
+| Emacs | Inline `/ssh:bastion\|ssh:target:` |
+| --- | --- |
+| 28.x | kept in the file name, so `quite` copies it |
+| 29.2+ | dropped by default; kept when `tramp-show-ad-hoc-proxies` is non-nil |
+
+From 29.2, TRAMP rewrites an inline hop into `tramp-default-proxies-alist` as
+*session* state, which `tramp-cleanup-all-connections` clears. For a hop that
+survives everywhere, declare it there yourself — TRAMP's own mechanism:
+
+```elisp
+(add-to-list 'tramp-default-proxies-alist '("\\`target\\'" nil "/ssh:bastion:"))
+```
+
+Two different bastions reaching one target are ambiguous once the names
+collapse, so that is not supported.
 
 ## Architecture
 

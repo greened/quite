@@ -11,6 +11,12 @@ jobs:
       fail-fast: false
       matrix:
         emacs_version:
+          # 28.1 is the Package-Requires floor, so it is the version that has
+          # to pass -- not merely the oldest one convenient to test.  It also
+          # predates tramp-show-ad-hoc-proxies, which arrived in 29.2, so it
+          # is the only entry exercising the inline-hop branch of the
+          # connection specs.
+          - '28.1'
           - '28.2'
           - '29.4'
           - 'snapshot'

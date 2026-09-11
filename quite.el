@@ -77,12 +77,12 @@ consisting of:
 
 :function           Function to invoke
 
-Host detection is based on the current buffer.  If the current
-buffer is associated with a remote, the host of the remote is
-used.  Otherwise if the current buffer is associated with a file,
-the local host is used.  Otherwise if :prompt is non-nil, the user
-is prompted for a host to use.  Otherwise :default-host-func is
-invoked with the current buffer to determine the host."
+Connection detection is based on the current buffer.  If the
+current buffer visits a remote file, that file's own TRAMP prefix
+is used.  If it visits a local file, the connection is nil.
+Otherwise if :prompt is non-nil, the user is prompted for a host.
+Otherwise :default-host-func is invoked with the current buffer.
+Either may answer nil, which means the local machine."
   :type '(repeat
 	  (plist
 	   :options ((:function function))))
@@ -109,17 +109,27 @@ invoked with the current buffer to determine the host."
 
 ;;;###autoload
 (defcustom quite-remote-method "ssh"
-  "TRAMP method quite uses to reach a remote build host.
+  "TRAMP method quite uses when it must invent a remote prefix.
 
 The value is a method name as it appears in `tramp-methods', without
-the surrounding slash and colon.  quite builds a remote path as
-/METHOD:HOST:/path, and recognizes that same form when it strips a
-prefix back off.  A method whose prefix needs more than a host name,
-such as one carrying a port or a hop, is not supported."
+the surrounding slash and colon.  quite uses it only where it has no
+real name to copy: when the current buffer visits no file, so the host
+comes from a prompt or from a descriptor's :default-host-func.
+
+When the buffer does visit a file, quite takes that file's own TRAMP
+prefix verbatim, so the method, user and port are whatever the buffer
+already used and this option does not apply."
   :type 'string
   :group 'quite)
 
 ;;; Implementation
+
+;; A CONNECTION is quite's internal currency for "where a command runs".  It
+;; is nil for the local machine, or a TRAMP prefix string such as
+;; "/ssh:me@host#2222:".  A bare host name cannot represent a user, a port or
+;; a hop, so quite carries the prefix and derives a host from it only for
+;; display.  Locality is nil, never a host that happens to equal
+;; `system-name' -- /ssh:localhost: and /sudo: are deliberate remoteness.
 
 (defvar quite-remote--host-list nil)
 
@@ -131,14 +141,41 @@ such as one carrying a port or a hop, is not supported."
   "Return the TRAMP prefix that reaches HOST via `quite-remote-method'."
   (concat "/" quite-remote-method ":" host ":"))
 
-(defun quite-remote--strip-host (path)
-  "Remove the method/host prefix from PATH if present.
-Only a prefix naming `quite-remote-method' is removed."
-  (replace-regexp-in-string
-   (concat "^\\(/" (regexp-quote quite-remote-method)
-	   ":\\([-._[:alnum:]]+@\\)?[-._[:alnum:]]+:\\)")
-   ""
-   path))
+(defun quite-remote-localname (path)
+  "Return the local part of PATH, with any TRAMP prefix removed.
+Handles a user, a port, a hop and any method, because it defers to
+`file-local-name' rather than matching a prefix quite wrote itself."
+  (file-local-name path))
+
+(defun quite-remote-connection (path)
+  "Return the connection PATH names, or nil when PATH is local.
+The connection is PATH's TRAMP prefix, such as \"/ssh:me@host#2222:\".
+
+Prefer the literal prefix, which is PATH with its local part removed.
+That keeps an inline hop that `file-remote-p' would discard: on Emacs
+28.x a canonical name still carries one, and from Emacs 29.2 it does
+when `tramp-show-ad-hoc-proxies' is non-nil.
+
+`file-local-name' may vary with connection state, so the suffix
+relationship is checked and not assumed.  Fall back to `file-remote-p',
+the documented idiom, when it does not hold."
+  (let ((local (file-local-name path)))
+    (cond ((equal local path) nil)
+          ((string-suffix-p local path)
+           (substring path 0 (- (length path) (length local))))
+          (t (file-remote-p path)))))
+
+(defun quite-remote-display-host (connection)
+  "Return a host name for CONNECTION, for display only.
+Return `system-name' when CONNECTION is nil.
+
+The result identifies no connection on its own.  It drops the method
+and the user, and it keeps the port, because that is what
+`file-remote-p' returns for `host'.  So /ssh:me@h: and /sudo:you@h:
+both give \"h\".  Use `quite--connection-token' where identity matters."
+  (if connection
+      (or (file-remote-p connection 'host) "")
+    (system-name)))
 
 ;;; User-facing utlities
 
@@ -261,38 +298,54 @@ buffer for it.  Return nil otherwise."
 	     (buffer (find-file root-key-file)))
 	(when buffer (throw 'found buffer))))))
 
-(defun quite-project-find-project (project-dir host root-list key-files)
-  "Check ROOT-LIST on HOST for PROJECT_DIR and return one if found, prompt
-otherwise.  Ensure one of KEY-FILES is in the returned root.  The returned ROOT
-is a path on the remote HOST, without the remote prefix."
+(defun quite-project-find-project (project-dir connection root-list key-files)
+  "Check ROOT-LIST over CONNECTION for PROJECT-DIR and return one if found.
+Prompt otherwise.  Ensure one of KEY-FILES is in the returned root.
+CONNECTION is nil for local, or a TRAMP prefix.  The returned root is a
+path on that connection, without the prefix."
   (let ((the-root
-         (quite-project--path-for-buffer project-dir key-files)))
+         (quite-project--path-for-buffer project-dir key-files))
+        (prompted-root nil))
     (if (not the-root)
-        (let ((remote-prefix
-               (when (not (string-equal host (system-name)))
-                 (quite-remote--prefix host))))
-          (let ((found-root
-                 (catch 'found
-                   (dolist (root root-list)
-                     (dolist (file key-files)
-                       (let* ((try-root (concat root "/" project-dir))
-                              (remote-try-root (concat remote-prefix try-root)))
-                         (when (file-exists-p (concat remote-try-root "/" file))
-                           (throw 'found try-root)))))
-                   ;; Did not find a project in the given remote, prompt for one.
-                   (let* ((root (quite-project--prompt-for-root))
-                          (try-root (concat root "/" project-dir))
-                          (remote-try-root (concat remote-prefix try-root)))
-                     (dolist (file key-files)
-                       (when (file-exists-p (concat remote-try-root "/" file))
-                         (throw 'found try-root)))))))
-            (if (not found-root)
-                (error (format "%s does not exist in %s with %s on %s"
-                               project-dir root-list key-files host))
-              ;; return the found root (prefix-less) -- the whole search branch's
-              ;; value; without this the function returned nil even on a hit
-              found-root)))
-      (quite-remote--strip-host the-root))))
+        (let ((found-root
+               (catch 'found
+                 (dolist (root root-list)
+                   (dolist (file key-files)
+                     (let ((try-root (concat root "/" project-dir)))
+                       (when (file-exists-p
+                              (quite-remote-path connection
+                                                 (concat try-root "/" file)))
+                         (throw 'found try-root)))))
+                 ;; Did not find a project on the given connection, so prompt.
+                 (let* ((root (quite-project--prompt-for-root))
+                        (try-root (concat root "/" project-dir)))
+                   (setq prompted-root try-root)
+                   (dolist (file key-files)
+                     (when (file-exists-p
+                            (quite-remote-path connection
+                                               (concat try-root "/" file)))
+                       (throw 'found try-root)))))))
+          (if (not found-root)
+              ;; Name the connection, not a bare host: nil must read as
+              ;; "local" rather than as an empty string.  Name the prompted
+              ;; root too, or the last path actually tried is absent from the
+              ;; message that says nothing was found.
+              (error (format "%s does not exist in %s%s with %s on %s"
+                             project-dir root-list
+                             (if prompted-root
+                                 (format " or %s"
+                                         (quite-remote-path connection
+                                                            prompted-root))
+                               "")
+                             key-files
+                             (if connection
+                                 (format "%s (%s)" connection
+                                         (quite-remote-display-host connection))
+                               "the local machine")))
+            ;; return the found root (prefix-less) -- the whole search branch's
+            ;; value; without this the function returned nil even on a hit
+            found-root))
+      (quite-remote-localname the-root))))
 
 (defun quite-project-parse-descriptor (descriptor)
   "Parse DESCRIPTOR, returning a list (project-dir root-list
@@ -303,27 +356,29 @@ key-files-list)"
     (list project-dir root-list key-files-list)))
 
 (defun quite--run-project-remote (func descriptor tag)
-  "Run FUNC passing args from project DESCRIPTOR and TAG on the
-remote associated with the current buffer.  FUNC is expected to
-take host, project root a possibly-nil subdir and buffer
-arguments before TAG:
+  "Run FUNC passing args from project DESCRIPTOR and TAG.
+FUNC runs on the connection the current buffer's file lives on.  FUNC
+takes a connection, a project root, a possibly-nil subdir and a buffer
+before TAG:
 
-(FUNC host project-root subdir buffer TAG)
+(FUNC connection project-root subdir buffer TAG)
 
-The host, project-root subdir and buffer are determined from a combination of
-project descriptor entires and the oath of the current buffer."
+CONNECTION is nil for local, or a TRAMP prefix such as
+\"/ssh:me@host#2222:\".  FUNC receives the connection rather than a
+host, because a host cannot distinguish a user, a port, a hop or a
+method, and a build must not run on the wrong one of those."
   (let* ((project-config (quite-project-parse-descriptor descriptor))
 	 (project-dir (nth 0 project-config))
 	 (root-list (nth 1 project-config))
 	 (key-files-list (nth 2 project-config))
-	 (host (quite-remote-host-for-current-buffer
-		t 'quite-remote-localhost))
+	 (connection (quite-remote-connection-for-current-buffer
+		      t 'quite-remote-localhost))
 	 (root (quite-project-find-project
-		project-dir host root-list key-files-list))
+		project-dir connection root-list key-files-list))
 	 (buffer (quite-project-find-key-files-buffer
-		  (quite-remote-create-remote-path host root) key-files-list))
+		  (quite-remote-path connection root) key-files-list))
          (subdir (quite--extract-subdir root project-dir)))
-    (funcall func host root subdir buffer tag)))
+    (funcall func connection root subdir buffer tag)))
 
 (defun quite--generate-invoker (descriptor func)
   "Return a function to invoke FUNC passing the contents of
@@ -354,11 +409,19 @@ DESCRIPTOR and a tag as arguments."
 re-use it, otherwise run in the context of BUFFER.  FUNC may
 create a new buffer in which case the buffer will be renamed to
 BUFFER-NAME.  FUNC should return any new buffer created,
-otherwise nil."
+otherwise nil.
+
+A reused buffer adopts BUFFER's `default-directory' before FUNC runs.
+Without that it keeps the directory the previous invocation left, and
+`compile' inherits it -- so a command could run on the connection of an
+earlier build rather than the one just resolved."
   (let ((existing-buffer (get-buffer buffer-name)))
     (if existing-buffer
-	(progn
+	(let ((dir (and (buffer-live-p buffer)
+			(buffer-local-value 'default-directory buffer))))
 	  (set-buffer existing-buffer)
+	  (when dir
+	    (setq default-directory dir))
 	  (funcall func))
       ;; Use the provided buffer.
       (progn
@@ -375,17 +438,17 @@ COMMAND-FUNC within a buffer named by the return value of
 BUFFER-NAME-FUNC.  Both functions should have the following
 signature:
 
-(func host rootdir subdir buffer tag)
+(func connection rootdir subdir buffer tag)
 "
-  (lambda (host root subdir buffer tag)
+  (lambda (connection root subdir buffer tag)
     (quite--run-in-buffer-context
      ;; Function to run
      (lambda ()
-       (funcall command-func host root subdir buffer tag))
+       (funcall command-func connection root subdir buffer tag))
      ;; Buffer to run in
      buffer
      ;; Buffer name
-     (funcall buffer-name-func host root subdir buffer tag))))
+     (funcall buffer-name-func connection root subdir buffer tag))))
 
 (defun quite--buffer-format (string spec-alist)
   "Format STRING using SPEC-ALIST.
@@ -409,32 +472,35 @@ generating function will be substituted.  For example:
 ;;; User-facing utilities
 
 ;;;###autoload
-(defun quite-remote-create-remote-path (host path)
-  "Take local path PATH and create a remote path for it on HOST.
-The prefix names `quite-remote-method'."
-  (concat (quite-remote--prefix host) path))
+(defun quite-remote-path (connection path)
+  "Return PATH as reached over CONNECTION.
+CONNECTION is nil for the local machine, or a TRAMP prefix.  Nil needs
+no special case, because `concat' treats it as the empty string."
+  (concat connection path))
 
 ;;;###autoload
-(defun quite-remote-host-for-current-buffer (prompt default-host-func)
-  "Return the host if the current buffer is associated with a
-remote file, the local host if the current buffer is associated
-with a local file, prompt for user input otherwise."
+(defun quite-remote-connection-for-current-buffer (prompt default-host-func)
+  "Return the connection the current buffer's file lives on.
+Return nil for a local file.  When the buffer visits no file, prompt
+for a host if PROMPT is non-nil, otherwise call DEFAULT-HOST-FUNC with
+the buffer.  Either may answer nil, meaning local; a host is turned
+into a prefix with `quite-remote-method'."
   (let ((buffer-file (buffer-file-name)))
     (if buffer-file
-	(let ((host (file-remote-p buffer-file 'host)))
-	  (if host
-	      host
-	    (system-name)))
-      (if prompt
-	  (quite-remote--prompt-for-host)
-	(funcall default-host-func (current-buffer))))))
+        (quite-remote-connection buffer-file)
+      (let ((host (if prompt
+                      (quite-remote--prompt-for-host)
+                    (funcall default-host-func (current-buffer)))))
+        (and host (quite-remote--prefix host))))))
 
 ;;;###autoload
 (defun quite-remote-localhost (_buffer)
-  "Return the local host name.  This is a convenience function
-for use as a :default-host-func when specifying
-`quite-remote-descriptors'"
-  (system-name))
+  "Return nil, meaning the local machine.
+A convenience :default-host-func for `quite-project-descriptors'.  It
+returns nil rather than `system-name' because quite spells local as
+nil: a host equal to `system-name' would otherwise be indistinguishable
+from a deliberate /ssh:localhost: or /sudo: connection."
+  nil)
 
 ;;;###autoload
 (defun quite-generate-dispatcher (project-descriptor tag-function-alist)
@@ -465,7 +531,7 @@ for use as a :default-host-func when specifying
 
 Both functions should have the following signature:
 
-(func host rootdir subdir buffer tag)
+(func connection rootdir subdir buffer tag)
 "
   (let ((new-tag-function-alist
          ;; tag-function-alist contains the function to ultimately
@@ -504,11 +570,11 @@ mapping)."
 (defun quite--make-build-command (command git-project-name &optional prefix postfix)
   "Return a build function that compiles a git-project COMMAND.
 The returned function has the quite command signature
-\(HOST ROOT SUBDIR BUFFER TAG) and, when invoked, runs
+\(CONNECTION ROOT SUBDIR BUFFER TAG) and, when invoked, runs
 \"PREFIX git GIT-PROJECT-NAME COMMAND TAG POSTFIX\" via `compile'."
   (let ((template (format "%s git %s %%s %%s %s"
                           (or prefix "") git-project-name (or postfix ""))))
-    (lambda (_host _root _subdir _buffer tag)
+    (lambda (_connection _root _subdir _buffer tag)
       (compile (format template command tag)))))
 
 ;; A project's build architecture -- how its commands actually run -- is a
@@ -520,7 +586,7 @@ The returned function has the quite command signature
   "Return the build function for COMMAND in PROJECT under ARCHITECTURE.
 COMMAND is one of PROJECT's :commands plists and PROJECT is the project
 plist (see `quite-define-project').  The returned function has the quite
-command signature \(HOST ROOT SUBDIR BUFFER TAG) and starts exactly one
+command signature \(CONNECTION ROOT SUBDIR BUFFER TAG) and starts exactly one
 `compile'.  Dispatch is on PROJECT's :build-architecture symbol; add a
 method to teach quite a build architecture it does not know.")
 
@@ -552,7 +618,7 @@ separately, as :shell-command."
                                   line-to-run
                                   (plist-get project :command-postfix))))
          (line (mapconcat #'identity parts " ")))
-    (lambda (_host _root _subdir _buffer _tag)
+    (lambda (_connection _root _subdir _buffer _tag)
       (compile line))))
 
 (cl-defmethod quite-build-command (architecture command project)
@@ -579,14 +645,42 @@ not spell one out."
   (or (plist-get project :transforms)
       (list (list :name "" :func #'identity))))
 
+(defun quite--connection-token (connection)
+  "Return a short token identifying CONNECTION, for a buffer name.
+Nil gives `system-name' shortened to its first dotted component.  A
+connection gives its host, shortened the same way, plus a hash of the
+WHOLE connection string.
+
+The hash is not decoration.  A host alone cannot separate /ssh:host:
+from /sudo:host:, nor two users, nor two hops to one target, and two
+builds sharing a buffer name share one compilation process.
+
+`secure-hash' is used rather than `sxhash', whose value is neither
+stable across sessions nor of predictable width.
+
+Three caveats, all judged acceptable rather than absent.  The digest
+is truncated to 48 bits, so a remote/remote collision is possible in
+principle.  A local token is a bare host and a remote one ends in
+-HASH, so the two collide only if a local machine is actually named
+something like \"target-86fb57c059db\".  And the hash covers the
+spelling, not the meaning, so /ssh:host: and /ssh:host#22: get
+separate buffers though they reach one place."
+  (let ((host (car (split-string (quite-remote-display-host connection)
+                                 "\\."))))
+    (if connection
+        (format "%s-%s" host
+                (substring (secure-hash 'sha256 connection) 0 12))
+      host)))
+
 (defun quite--make-buffer-name (project-name name)
   "Return a function naming the compilation buffer for build NAME.
 The returned function has the quite command signature
-\(HOST ROOT SUBDIR BUFFER TAG); HOST is shortened to its first dotted
-component."
-  (lambda (host _root subdir _buffer tag)
+\(CONNECTION ROOT SUBDIR BUFFER TAG).  The connection is rendered by
+`quite--connection-token'."
+  (lambda (connection _root subdir _buffer tag)
     (format "*%s-%s-%s-%s-%s*"
-            project-name name subdir tag (car (split-string host "\\.")))))
+            project-name name subdir tag
+            (quite--connection-token connection))))
 
 (defun quite--broadcast-to-flavors (command-func flavors)
   "Return a tag-function alist mapping every flavor in FLAVORS to COMMAND-FUNC."
