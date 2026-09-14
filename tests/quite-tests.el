@@ -348,7 +348,47 @@
     (expect (quite-project--path-for-buffer "project" '("Makefile")) :to-equal nil))
   (it "returns nil for a non-file buffer"
     (spy-on 'buffer-file-name :and-return-value nil)
-    (expect (quite-project--path-for-buffer "project" '("Makefile")) :to-equal nil)))
+    (expect (quite-project--path-for-buffer "project" '("Makefile")) :to-equal nil))
+  (it "REJECTS a key file found above the project dir"
+    ;; The regression.  The buffer is inside /ws/outer/project/, which has no
+    ;; Makefile, but /ws/outer/ does.  Unbounded, the climb returned /ws/outer/
+    ;; and quite built the wrong project -- silently, since that root looks
+    ;; perfectly valid to every caller downstream.
+    (spy-on 'buffer-file-name :and-return-value "/ws/outer/project/sub/f.c")
+    (spy-on 'locate-dominating-file :and-return-value "/ws/outer/")
+    (expect (quite-project--path-for-buffer "project" '("Makefile")) :to-be nil))
+  (it "accepts a key file in an intermediate dir BELOW the project dir"
+    ;; The docstring promises intermediate directories work.  The bound must
+    ;; not break that.
+    (spy-on 'buffer-file-name :and-return-value "/ws/project/a/b/f.c")
+    (spy-on 'locate-dominating-file :and-return-value "/ws/project/a/")
+    (expect (quite-project--path-for-buffer "project" '("Makefile"))
+            :to-equal "/ws/project/a/"))
+  (it "accepts a key file exactly AT the project dir"
+    (spy-on 'buffer-file-name :and-return-value "/ws/project/sub/f.c")
+    (spy-on 'locate-dominating-file :and-return-value "/ws/project/")
+    (expect (quite-project--path-for-buffer "project" '("Makefile"))
+            :to-equal "/ws/project/"))
+  (it "keeps trying the remaining key files after rejecting one"
+    ;; A rejection must not abort the loop, or a project whose second key file
+    ;; is the valid one would fall through to the :root-list search.
+    (spy-on 'buffer-file-name :and-return-value "/ws/project/sub/f.c")
+    (spy-on 'locate-dominating-file :and-call-fake
+            (lambda (_f key) (if (equal key "Makefile") "/ws/" "/ws/project/")))
+    (expect (quite-project--path-for-buffer "project" '("Makefile" "build.sh"))
+            :to-equal "/ws/project/"))
+  (it "bounds a REMOTE buffer at the project dir too"
+    (spy-on 'buffer-file-name :and-return-value "/ssh:h:/ws/outer/project/sub/f.c")
+    (spy-on 'locate-dominating-file :and-return-value "/ssh:h:/ws/outer/")
+    (expect (quite-project--path-for-buffer "project" '("Makefile")) :to-be nil))
+  (it "treats the project dir as a literal, not a regexp"
+    ;; An unquoted project-dir let `.' match any character, so a buffer under
+    ;; /ws/my-proj/ satisfied a project-dir of "my.proj".  `locate-dominating-file'
+    ;; must be stubbed to something findable, or both the quoted and unquoted
+    ;; versions return nil and the spec passes without testing anything.
+    (spy-on 'buffer-file-name :and-return-value "/ws/my-proj/sub/f.c")
+    (spy-on 'locate-dominating-file :and-return-value "/ws/my-proj/")
+    (expect (quite-project--path-for-buffer "my.proj" '("Makefile")) :to-be nil)))
 
 (describe "quite-project-find-project"
   (it "returns the stripped buffer root when the buffer is in the project"

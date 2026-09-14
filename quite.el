@@ -269,18 +269,29 @@ the full path to it, nil otherwise."
 nil if the buffer isn't associated with a project source file.
 KEY-FILES is a list of files to look for in PROJECT-DIR.
 Intermediate directories between PROJECT-DIR and KEY-FILES are
-allowed."
+allowed.
+
+The search is BOUNDED at PROJECT-DIR.  `locate-dominating-file'
+climbs until it finds a key file or reaches the filesystem root, and
+matching PROJECT-DIR in the buffer's path does not stop it.  So a
+nested checkout, or any layout where the same key file name exists
+further up, used to yield an ancestor -- and quite then built the
+wrong project, silently, because the root it returned looked valid.
+A key file above PROJECT-DIR is rejected here, which leaves the
+caller to fall back to its :root-list search."
   (let ((buffer-file (buffer-file-name)))
-    (if buffer-file
-        (if (string-match (format "\\(.*/%s\\)/" project-dir)
-                          buffer-file)
-            (catch 'found
-              (dolist (key-file key-files)
-                (let ((found-file (locate-dominating-file buffer-file key-file)))
-                  (when found-file
-                    (throw 'found (file-name-directory found-file))))))
-          nil)
-      nil)))
+    (when (and buffer-file
+               (string-match (format "\\(.*/%s\\)/" (regexp-quote project-dir))
+                             buffer-file))
+      (let ((project-root (file-name-as-directory (match-string 1 buffer-file))))
+        (catch 'found
+          (dolist (key-file key-files)
+            (let ((found-file (locate-dominating-file buffer-file key-file)))
+              (when (and found-file
+                         (string-prefix-p
+                          project-root
+                          (file-name-as-directory (expand-file-name found-file))))
+                (throw 'found (file-name-directory found-file))))))))))
 
 (defvar quite-project--root-list nil)
 
