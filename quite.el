@@ -290,13 +290,21 @@ allowed."
 		      'quite-project--root-list))
 
 (defun quite-project-find-key-files-buffer (project-root key-files)
-  "See if one of KEY-FILES exists under PROJECT-ROOT and return a
-buffer for it.  Return nil otherwise."
-  (catch 'found
-    (dolist (key-file key-files)
-      (let* ((root-key-file (concat project-root "/" key-file))
-	     (buffer (find-file root-key-file)))
-	(when buffer (throw 'found buffer))))))
+  "Return a buffer visiting the first of KEY-FILES that exists under PROJECT-ROOT.
+Return nil when none of them exists.
+
+Existence is decided by `quite-project--file-exists-p', not by whether a
+buffer came back.  `find-file' returns a buffer for a file that does not
+exist -- that is how you create one -- so testing its result always
+succeeded, the first key file always won, and the rest were never tried.
+PROJECT-ROOT carries the connection prefix, so the buffer that got made
+was a phantom on the remote host, and making it opened a connection.
+
+`find-file-noselect' rather than `find-file': this is a lookup, and it
+should not rearrange the user's windows."
+  (let ((key-file (quite-project--file-exists-p project-root key-files)))
+    (when key-file
+      (find-file-noselect key-file))))
 
 (defun quite-project-find-project (project-dir connection root-list key-files)
   "Check ROOT-LIST over CONNECTION for PROJECT-DIR and return one if found.

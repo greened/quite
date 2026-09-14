@@ -303,6 +303,35 @@
     (spy-on 'file-exists-p :and-return-value nil)
     (expect (quite-project--file-exists-p "/root" '("Makefile")) :to-equal nil)))
 
+(describe "quite-project-find-key-files-buffer"
+  (before-each
+    (spy-on 'find-file-noselect :and-return-value :the-buffer)
+    (spy-on 'find-file :and-return-value :wrong-buffer))
+  (it "visits the first key file that EXISTS, not the first one listed"
+    ;; The regression.  This used to return a buffer for build.sh, because
+    ;; find-file ALWAYS returns one, so the existence test never ran.
+    (spy-on 'file-exists-p :and-call-fake
+            (lambda (p) (string-suffix-p "Makefile" p)))
+    (expect (quite-project-find-key-files-buffer "/root" '("build.sh" "Makefile"))
+            :to-be :the-buffer)
+    (expect 'find-file-noselect :to-have-been-called-with "/root/Makefile"))
+  (it "returns nil when no key file exists"
+    (spy-on 'file-exists-p :and-return-value nil)
+    (expect (quite-project-find-key-files-buffer "/root" '("Makefile")) :to-be nil))
+  (it "creates NO buffer by ANY means when no key file exists"
+    ;; The phantom.  PROJECT-ROOT carries the connection prefix, so a visit
+    ;; here would also open a remote connection for a file that is not there.
+    ;; Assert on BOTH visit functions: the old code called `find-file', so a
+    ;; check of `find-file-noselect' alone would have passed against the bug.
+    (spy-on 'file-exists-p :and-return-value nil)
+    (quite-project-find-key-files-buffer "/ssh:h:/root" '("Makefile"))
+    (expect 'find-file-noselect :not :to-have-been-called)
+    (expect 'find-file :not :to-have-been-called))
+  (it "never uses find-file, which would rearrange the user's windows"
+    (spy-on 'file-exists-p :and-return-value t)
+    (quite-project-find-key-files-buffer "/root" '("Makefile"))
+    (expect 'find-file :not :to-have-been-called)))
+
 (describe "quite-project--path-for-buffer"
   (it "finds the project root for a local buffer inside the project"
     (spy-on 'buffer-file-name :and-return-value "/home/me/project/src/f.c")
