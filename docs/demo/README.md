@@ -11,8 +11,9 @@ the command line, so nothing real is executed and there's no network.
 
 | Script | GIF | Shows |
 |---|---|---|
-| `demo-matrix.el` | `quite.gif` | the command × flavor grid quite composes, then running `build` / `check` via `compile` |
+| `demo-matrix.el` | `quite.gif` | the command × flavor grid, then **real keypresses** — `C-c q a b` and `C-u C-c q a b` — showing the prefix argument select two flavors |
 | `demo-run.el` | `quite-run.gif` | `quite-run` — the headless entry a tool/orchestrator calls |
+| `demo-remote.el` | *(not yet recorded)* | quite following the buffer to a REMOTE host over TRAMP — the headline feature. Needs an ssh alias `demo-host` and the project present on the remote at `/tmp/quite-demo/app` |
 | `demo-common.el` | — | shared setup: load quite + hydra, define the stubbed `app` project |
 
 ## Prerequisites
@@ -36,3 +37,15 @@ agg --theme monokai quite.cast ../media/quite.gif
 ```
 
 Each script drives itself and exits (`kill-emacs`) when done.
+
+`demo-matrix.el` drives the **real keymap** with `execute-kbd-macro`, so it
+needs a project on disk for the interactive path to resolve: it creates
+`/tmp/quite-demo/app` with a `Makefile` and a source file, and visits that file.
+Remove `/tmp/quite-demo` between recordings for a clean run.
+
+**Never narrate a keystroke the script does not send.** An earlier version of
+`demo-matrix.el` printed "C-c a b ..." while actually calling `quite-run`, so
+the GIF asserted an interaction that never happened — and that hid a real bug:
+the key sequence in the message was wrong, because inside `quite-command-map`
+a command sits at the project's `:prefix-key` followed by the command's key
+(`C-c q` + `a` + `b`), not at the command key alone.

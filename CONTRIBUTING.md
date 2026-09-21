@@ -15,7 +15,7 @@ extension points, and the important internals.
 quite has a simple job: **organize a matrix of build commands and point `compile`
 at the right host and root.** Remoteness is free — `compile` with a remote
 `default-directory` runs on the remote host via TRAMP; quite just resolves *which*
-host/root and *which* command. A generic **caller** (a keybinding, a Hydra, or an
+connection/root and *which* command. A generic **caller** (a keybinding, a Hydra, or an
 orchestrator) drives quite; the **build host** is local or any TRAMP remote.
 
 ```mermaid
@@ -26,7 +26,7 @@ flowchart TB
     REG[("quite--projects<br/>registry")]
     MAP["quite-command-map + Hydra heads"]
     RUN["quite-run · headless"]
-    CTX["host/root from buffer<br/>remote-host · find-project"]
+    CTX["connection/root from buffer<br/>remote-connection · find-project"]
     CMD["quite-build-command<br/>(architecture) → compile"]
     DEF --> REG
     DEF --> MAP
@@ -184,10 +184,23 @@ Green means **no byte-compile warnings and every spec passes.**
 ## Conventions
 
 - Docstrings wrap at 80 columns.
-- Specs exercise the pure layer — host/root resolution mocks `file-exists-p` /
-  `system-name`; dispatch and command composition are tested without a real
-  `compile`.
+- Specs exercise the pure layer — connection/root resolution mocks
+  `file-exists-p` / `system-name`; dispatch and command composition are tested
+  without a real `compile`.
+- **TRAMP name parsing is the deliberate exception: do NOT mock it.** Those
+  specs call the real `file-remote-p` and `file-local-name`, because parsing
+  needs no network and stubbing them would stub the exact behavior the
+  connection model rests on. A hop spec must additionally pass its name through
+  `expand-file-name` (quite reads `buffer-file-name`, which is canonical) and
+  bind `tramp-default-proxies-alist`, since TRAMP records an ad-hoc route
+  there. Version-gate hop expectations on `(boundp 'tramp-show-ad-hoc-proxies)`:
+  Emacs 28.x keeps an inline hop, 29.2+ drops it unless that option is set.
 - Add a spec with any behavior change.
+- **Run the negative control on a regression spec:** check it out against the
+  OLD code and confirm it fails, and confirm the failure COUNT matches what you
+  predicted. Two specs in this suite passed against the very bug they were
+  written for — one asserted the wrong function was not called, the other left
+  `locate-dominating-file` unstubbed so both versions returned nil.
 - quite is a **generic** build organizer — it names no consumer. New integration
   points (like `quite-run`) are plain functions/registries any caller can use.
 

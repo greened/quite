@@ -18,11 +18,13 @@ runs the one after and so on. `quite-define-project` composes a whole matrix of
 > configuration is deliberately explicit (you describe your projects and command
 > vocabulary yourself). For the trade-offs, see **quite: pros and cons** below.
 
-![quite: a project's command × flavor matrix, then running build and check via compile](docs/media/quite.gif)
+![quite: a command × flavor matrix, then C-c q a b and C-u C-c q a b selecting two flavors](docs/media/quite.gif)
 
-*One prefix key reaches a grid of build variants (commands × flavors). Picking
-one runs it as ordinary `compile`, so a remote `default-directory` builds on the
-remote host. (Example data. The build command is stubbed to echo.)*
+*One prefix key reaches a grid of build variants (commands × flavors). Then the
+same binding is pressed twice — `C-c q a b`, then `C-u C-c q a b` — and the
+prefix argument selects a different flavor each time. Execution is ordinary
+`compile`, so a remote `default-directory` builds on the remote host. (Example
+data. The build command is stubbed to echo, so nothing real runs.)*
 
 ## What it does
 
@@ -75,7 +77,7 @@ using the same keys.
 | Function | Role |
 |---|---|
 | `quite-remote-connection-for-current-buffer` | resolves the buffer's TRAMP connection, nil for local |
-| `quite-project-find-project` | finds the project root on that host (buffer-relative or by searching `:root-list`) |
+| `quite-project-find-project` | finds the project root on that connection (buffer-relative or by searching `:root-list`) |
 | `quite--dispatch` / `quite--prefix-arg-index` | maps the raw prefix argument to a flavor index |
 | `quite-generate-buffer-dispatcher` | builds the interactive command that runs a flavor in a named buffer |
 | `quite-define-project` | composes commands × transforms × flavors into `quite-command-map` + Hydra heads |
@@ -118,10 +120,51 @@ survives everywhere, declare it there yourself — TRAMP's own mechanism:
 Two different bastions reaching one target are ambiguous once the names
 collapse, so that is not supported.
 
+## How your commands actually run: `:build-architecture`
+
+The examples above assume [`git-project`][gp], which is what `quite` grew up
+driving. It composes `PREFIX git GIT-NAME COMMAND TAG POSTFIX`. That is the
+default, and a project that omits `:build-architecture` gets it.
+
+**Your project probably builds with its own tooling instead** — `make`, a
+`./check.sh`, `cask`, `hatch`. Say so, and give each command the line to run:
+
+```elisp
+(quite-define-project
+ (list :name "mylib"
+       :build-architecture 'shell          ; not git-project
+       :prefix-key "l"
+       :target "mylib"
+       :descriptor '(:project-dir "mylib"
+                     :root-list ("~/projects")
+                     :key-files ("Makefile"))
+       :commands '((:name "build" :command "build"
+                    :shell-command "make -j8")
+                   (:name "check" :command "check"
+                    :shell-command "make check"))))
+```
+
+Two things to know about the `shell` architecture:
+
+- `:command` stays the command's **lookup name** — the verb `quite-run` and
+  `quite-run-repo` search for, conventionally `build` or `check`. The line to
+  execute goes in `:shell-command`. They are separate on purpose.
+- **The build tag is ignored**, because there is nowhere to interpolate it. So
+  a `shell` project's commands differ by which `:commands` entry runs, not by
+  flavor. Such a project usually wants no `:prefixes` at all, in which case its
+  single flavor is named by `:target` alone.
+
+Neither architecture is privileged. `quite-build-command` is a generic, and
+teaching `quite` a third one is a `cl-defmethod` on a new symbol, with no
+change to `quite` itself — see **Two entry surfaces** in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+[gp]: https://github.com/greened/git-project
+
 ## Architecture
 
 quite defines your projects and exposes them two ways. One is an **interactive**
-matrix (keymap + Hydra, host/root resolved from the current buffer). The other
+matrix (keymap + Hydra, connection/root resolved from the current buffer). The other
 is a **headless** entry (`quite-run`, for scripts and orchestrators). Both
 bottom out in plain `compile`, so a remote `default-directory` runs the build on
 the remote host. A generic **caller** (a keybinding, a Hydra or an orchestrator
@@ -135,7 +178,7 @@ flowchart TB
     REG[("quite--projects<br/>registry")]
     MAP["quite-command-map<br/>+ Hydra heads"]
     RUN["quite-run<br/>NAME COMMAND [DIR BUFFER]"]
-    CTX["host/root from buffer<br/>remote-host · find-project"]
+    CTX["connection/root from buffer<br/>remote-connection · find-project"]
     CMD["quite-build-command<br/>(architecture) → compile"]
     DEF --> REG
     DEF --> MAP
@@ -248,7 +291,7 @@ action. ⁴ Defers to `project.el` for management.
 |---|---|
 | Same keys run locally or remotely, following the buffer's host | Niche. Overlaps with better-maintained general packages |
 | Prefix-argument **flavor matrix**: one key, many build variants | Idiosyncratic flavor model with a learning curve |
-| Explicit **multi-root search** on the resolved host | You must hand-write descriptors + the command/flavor matrix (no auto-detection) |
+| Explicit **multi-root search** on the resolved connection | You must hand-write descriptors + the command/flavor matrix (no auto-detection) |
 | Composes cleanly into a keymap + Hydra | Small, single-author project |
 | Lightweight and focused. Builds on plain `compile` | Its remote transparency largely *is* TRAMP + `default-directory`, not unique |
 
