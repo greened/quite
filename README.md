@@ -26,6 +26,16 @@ prefix argument selects a different flavor each time. Execution is ordinary
 `compile`, so a remote `default-directory` builds on the remote host. (Example
 data. The build command is stubbed to echo, so nothing real runs.)*
 
+![quite: the same key on a remote buffer, and the build runs on the remote host](docs/media/quite-remote.gif)
+
+*The lead claim, shown rather than described. The buffer visits
+`/ssh:demo-host:…/app/src/app.c` on another machine, and the same `C-c q a b`
+builds **there**. Nothing about the project definition or the keys changes —
+only the buffer. The compilation buffer's `default-directory` is the remote
+root, and its name carries a hash of the connection, so two hosts never share
+one buffer. (Example data. The build command is stubbed to echo, so nothing
+real runs.)*
+
 ## What it does
 
 - **The host follows the buffer.** `quite` inspects the current buffer with
@@ -204,9 +214,10 @@ PROJECT COMMAND [DIR]` runs a registered project's command headlessly (no
 keymap, Hydra or file-visiting buffer needed), reusing the same compile command
 as the interactive path, so a programmatic build matches what you'd get by hand.
 
-![quite-run: calling a registered project's build headlessly, no keymap or Hydra](docs/media/quite-run.gif) Internals, meaning the
-project/descriptor data model, the dispatch machinery and the extension points,
-are in [CONTRIBUTING.md](CONTRIBUTING.md).
+![quite-run: calling a registered project's build headlessly, no keymap or Hydra](docs/media/quite-run.gif)
+
+Internals, meaning the project/descriptor data model, the dispatch machinery
+and the extension points, are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How it compares
 

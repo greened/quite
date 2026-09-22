@@ -4,6 +4,14 @@
 
 Reconstructed from git history. `v0.1.0` is the first tagged release.
 
+## Unreleased
+
+- Recorded `quite-remote.gif`. `v0.1.0` shipped `demo-remote.el` with no
+  capture, so the feature the README leads with — the build follows the buffer
+  to another host — was the one thing the GIFs never showed. It now shows a
+  remote buffer, the same `C-c q a b`, and a compilation whose
+  `default-directory` is the remote project root.
+
 ## v0.1.0 — 2026
 
 The dormant package woke up and matured into a shippable tool. The build-composition machinery moved out of personal init and into the package proper (`quite-define-project`, built on independent binding and hydra-head builders), with pre-existing bugs and byte-compile warnings cleared. A headless surface was added so orchestrators like gaffer can drive builds without a keymap or a file-visiting buffer, and the project grew a real test suite, CI, docs, and demo GIFs.

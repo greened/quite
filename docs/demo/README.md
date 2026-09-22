@@ -13,7 +13,7 @@ the command line, so nothing real is executed and there's no network.
 |---|---|---|
 | `demo-matrix.el` | `quite.gif` | the command × flavor grid, then **real keypresses** — `C-c q a b` and `C-u C-c q a b` — showing the prefix argument select two flavors |
 | `demo-run.el` | `quite-run.gif` | `quite-run` — the headless entry a tool/orchestrator calls |
-| `demo-remote.el` | *(not yet recorded)* | quite following the buffer to a REMOTE host over TRAMP — the headline feature. Needs an ssh alias `demo-host` and the project present on the remote at `/tmp/quite-demo/app` |
+| `demo-remote.el` | `quite-remote.gif` | quite following the buffer to a REMOTE host over TRAMP — the headline feature. Needs an ssh alias `demo-host` and the project present on the remote at `/tmp/quite-demo/app` |
 | `demo-common.el` | — | shared setup: load quite + hydra, define the stubbed `app` project |
 
 ## Prerequisites
@@ -37,6 +37,13 @@ agg --theme monokai quite.cast ../media/quite.gif
 ```
 
 Each script drives itself and exits (`kill-emacs`) when done.
+
+**Record from a shell that has job control.** `asciinema` puts the terminal
+into raw mode. Started from a shell without job control — `sh -c`, an editor's
+`start-process`, or a `tmux new-session` whose command *is* the recorder — it
+sits in a background process group, takes `SIGTTOU` and stops. The symptom is
+silence: no cast file, no error, and `ps` reporting state `T`. Type the command
+in a terminal, or send it to an interactive `tmux` pane with `send-keys`.
 
 `demo-matrix.el` drives the **real keymap** with `execute-kbd-macro`, so it
 needs a project on disk for the interactive path to resolve: it creates
