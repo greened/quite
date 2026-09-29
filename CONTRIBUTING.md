@@ -168,15 +168,13 @@ plain `load-path` + `require`. Needs Emacs ≥ 28 and [`hydra`]; the tests need
 
 ## Running the checks
 
-There's no `check.sh` yet; the equivalent invocation (byte-compile with warnings
-as errors, then buttercup) is:
+`./check.sh` byte-compiles with warnings as errors, then runs buttercup. It
+needs no Cask. It takes buttercup from the elpaca builds dir. The checkout
+comes first on the `load-path`, so the specs run against it and not against an
+installed quite:
 
 ```sh
-ADD='(dolist (d (directory-files "~/.emacs.d/elpaca/builds" t "^[^.]"))
-       (when (file-directory-p d) (add-to-list (quote load-path) d)))'
-emacs -batch -Q --eval "$ADD" --eval '(setq byte-compile-error-on-warn t)' \
-  -L . -f batch-byte-compile quite.el && rm -f *.elc
-emacs -batch -Q --eval "$ADD" -L . -L tests -l buttercup -f buttercup-run-discover
+EMACS=/path/to/emacs ELPACA_BUILDS=~/.emacs.d/elpaca/builds ./check.sh
 ```
 
 Green means **no byte-compile warnings and every spec passes.**

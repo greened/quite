@@ -332,6 +332,9 @@ cask install     # once, to fetch dev dependencies
 make test        # cask exec buttercup -L . tests
 ```
 
+Without Cask, `./check.sh` runs the same suite with buttercup from an elpaca
+builds dir. See `CONTRIBUTING.md`.
+
 CI runs the suite across several Emacs versions on every push (see
 `.github/workflows/test.yml`).
 
