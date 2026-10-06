@@ -6,6 +6,7 @@ Reconstructed from git history. `v0.1.0` is the first tagged release.
 
 ## Unreleased
 
+- Relicensed from GPL-3.0-or-later to AGPL-3.0-or-later.
 - Recorded `quite-remote.gif`. `v0.1.0` shipped `demo-remote.el` with no
   capture, so the feature the README leads with — the build follows the buffer
   to another host — was the one thing the GIFs never showed. It now shows a

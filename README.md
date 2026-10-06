@@ -340,4 +340,4 @@ CI runs the suite across several Emacs versions on every push (see
 
 ## License
 
-GPL-3.0-or-later. See `LICENSE.md`.
+AGPL-3.0-or-later. See `LICENSE.md`.
