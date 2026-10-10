@@ -729,7 +729,73 @@
     (it "binds commands AND returns the hydra heads"
       (let ((heads (quite-define-project project)))
         (expect (length heads) :to-equal 2)
-        (expect (commandp (lookup-key quite-command-map (kbd "pb"))) :to-be-truthy))))
+        (expect (commandp (lookup-key quite-command-map (kbd "pb"))) :to-be-truthy)))
+
+    (describe "prefix-key collisions"
+      (it "warns naming both projects and the key"
+        (spy-on 'display-warning)
+        (let ((quite--projects nil))
+          (quite-define-project project)
+          (quite-define-project (plist-put (copy-sequence project) :name "Q")))
+        (expect (spy-calls-count 'display-warning) :to-equal 1)
+        (let ((args (spy-calls-args-for 'display-warning 0)))
+          (expect (car args) :to-be 'quite)
+          (expect (cadr args) :to-match "\"Q\"")
+          (expect (cadr args) :to-match "\"P\"")
+          (expect (cadr args) :to-match "\"p\"")))
+      (it "compares keys in their kbd form"
+        (spy-on 'display-warning)
+        (let ((quite--projects nil))
+          (quite-define-project (plist-put (copy-sequence project)
+                                           :prefix-key "x y"))
+          (quite-define-project (plist-put (plist-put (copy-sequence project)
+                                                      :name "Q")
+                                           :prefix-key "xy")))
+        (expect (spy-calls-count 'display-warning) :to-equal 1))
+      (it "accepts a vector prefix key"
+        (spy-on 'display-warning)
+        (let ((quite--projects nil))
+          (quite-define-project (plist-put (copy-sequence project)
+                                           :prefix-key [?p]))
+          (quite-define-project (plist-put (copy-sequence project) :name "Q")))
+        (expect (spy-calls-count 'display-warning) :to-equal 1))
+      (it "stays silent when the same name is redefined"
+        (spy-on 'display-warning)
+        (let ((quite--projects nil))
+          (quite-define-project project)
+          (quite-define-project project))
+        (expect 'display-warning :not :to-have-been-called))
+      (it "stays silent for distinct keys"
+        (spy-on 'display-warning)
+        (let ((quite--projects nil))
+          (quite-define-project project)
+          (quite-define-project (plist-put (plist-put (copy-sequence project)
+                                                      :name "Q")
+                                           :prefix-key "q")))
+        (expect 'display-warning :not :to-have-been-called))
+      (it "stays silent between projects with no prefix key"
+        (spy-on 'display-warning)
+        (let ((quite--projects nil)
+              (bare (copy-sequence project)))
+          (setq bare (plist-put bare :prefix-key nil))
+          (quite-define-project bare)
+          (quite-define-project (plist-put (copy-sequence bare) :name "Q")))
+        (expect 'display-warning :not :to-have-been-called))
+      (it "warns before the new project's binding replaces the old one"
+        (let ((quite--projects nil)
+              (bound-at-warning nil)
+              (first-binding nil))
+          (spy-on 'display-warning
+                  :and-call-fake
+                  (lambda (&rest _)
+                    (setq bound-at-warning
+                          (lookup-key quite-command-map (kbd "pb")))))
+          (quite-define-project project)
+          (setq first-binding (lookup-key quite-command-map (kbd "pb")))
+          (quite-define-project (plist-put (copy-sequence project) :name "Q"))
+          (expect bound-at-warning :to-be first-binding)
+          (expect (lookup-key quite-command-map (kbd "pb"))
+                  :not :to-be first-binding)))))
 
   (describe "end-to-end dispatch"
     (it "a bound command compiles the flavor chosen by the prefix arg"

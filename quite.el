@@ -824,6 +824,23 @@ it builds its own dispatchers and does not depend on
 `quite-define-project'.  Lets code invoke a project's build headlessly via
 `quite-run'.")
 
+(defun quite--warn-on-shared-prefix-key (project)
+  "Warn if a project other than PROJECT already uses its :prefix-key."
+  (let ((name (plist-get project :name))
+        (key (plist-get project :prefix-key)))
+    (when key
+      (dolist (entry quite--projects)
+        (let ((other-key (plist-get (cdr entry) :prefix-key)))
+          ;; Normalise as the binder does, so "x y" matches "xy" and a
+          ;; vector key still works.
+          (when (and other-key
+                     (not (equal (car entry) name))
+                     (equal (kbd (concat other-key)) (kbd (concat key))))
+            (display-warning
+             'quite
+             (format "Project %S's :prefix-key %S is also used by project %S"
+                     name key (car entry)))))))))
+
 (defun quite-define-project (project)
   "Install PROJECT's build commands and return its hydra heads.
 Binds every command via `quite-bind-project-commands' and returns the
@@ -851,7 +868,12 @@ PROJECT is a plist:
   :transforms      optional list of (:name :func) plists (:func maps a
                    command key); defaults to a single identity transform
   :command-prefix  optional shell text before the compile command
-  :command-postfix optional shell text after the compile command"
+  :command-postfix optional shell text after the compile command
+
+Warns when another project with a different :name already uses
+PROJECT's :prefix-key, since where their command keys overlap the
+later binding wins."
+  (quite--warn-on-shared-prefix-key project)
   (setf (alist-get (plist-get project :name) quite--projects nil nil #'equal)
         project)
   (quite-bind-project-commands project)

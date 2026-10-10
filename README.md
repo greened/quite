@@ -51,7 +51,9 @@ real runs.)*
   chosen flavor's tag is passed through to the shell command.
 - **Composition.** `quite-define-project` turns a compact spec into (a) bindings
   in `quite-command-map` and (b) Hydra heads, so a project's whole build matrix
-  is a few keystrokes away.
+  is a few keystrokes away. Projects with different names that share a
+  `:prefix-key` get a warning, because where their command keys overlap the
+  later project's bindings replace the earlier one's.
 
 ## Example
 
