@@ -6,6 +6,9 @@ Reconstructed from git history. `v0.1.0` is the first tagged release.
 
 ## Unreleased
 
+- Added `changelog.sh`, which writes a release's CHANGELOG section from the
+  commits it ships, so branches no longer edit this file.
+- Added `check.sh`, so the suite runs without Cask.
 - Relicensed from GPL-3.0-or-later to AGPL-3.0-or-later.
 - Recorded `quite-remote.gif`. `v0.1.0` shipped `demo-remote.el` with no
   capture, so the feature the README leads with — the build follows the buffer

@@ -36,3 +36,6 @@ jobs:
 
       - name: Run tests
         run: make test
+
+      - name: Test changelog.sh
+        run: sh tests/changelog-test.sh

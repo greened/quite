@@ -1,5 +1,6 @@
 #!/bin/sh
-# check.sh -- byte-compile (warnings fatal) + buttercup specs for quite.
+# check.sh: byte-compile (warnings fatal), buttercup specs and the
+# changelog.sh test for quite.
 #
 # Env:
 #   EMACS          Emacs binary (default: emacs)
@@ -23,3 +24,6 @@ rm -f ./*.elc tests/*.elc
 echo "== buttercup =="
 "$EMACS" -batch -Q --eval "$ADD" -L . -L tests \
   -l buttercup -f buttercup-run-discover
+
+echo "== changelog.sh (fixture repo) =="
+sh tests/changelog-test.sh

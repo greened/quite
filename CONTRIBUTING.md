@@ -9,6 +9,7 @@ extension points, and the important internals.
 - `quite.el` — the whole package (one file, `;;;`-sectioned).
 - `tests/quite-tests.el` — buttercup specs (pure; no network/repo).
 - `README.md` — user-facing overview + comparison.
+- `changelog.sh` writes a release's `CHANGELOG.md` entries from its commits.
 
 ## Architecture
 
@@ -179,6 +180,42 @@ EMACS=/path/to/emacs ELPACA_BUILDS=~/.emacs.d/elpaca/builds ./check.sh
 
 Green means **no byte-compile warnings and every spec passes.**
 
+`check.sh` also runs `tests/changelog-test.sh`, which checks `changelog.sh` on
+fixture repositories with no global or system git config. CI runs it too.
+
+## Releasing
+
+A branch does not touch `CHANGELOG.md`. A release writes the entries from the
+commits that landed since the last release tag, so parallel branches do not
+all edit its top and conflict there on a restack. A release's section starts
+with a `## vX.Y.Z` heading that carries the date, and each commit gives one
+bullet below it: its subject, then its body's lead paragraph on the same line.
+Write a commit's subject and lead paragraph to read as its entry. A commit
+with a `Changelog: skip` trailer, such as a spec-only or whitespace change,
+gets no entry. Only a tag of the form `vX.Y.Z` marks a release.
+
+To cut a release on `master`:
+
+1. Set the `Version:` header in `quite.el`.
+2. Run `./changelog.sh --version X.Y.Z`. It adds the release's section above
+   the old entries and leaves those as they are. With `--stdout` it prints the
+   generated section instead.
+3. Edit the entries, then commit them with the version through the usual flow.
+4. Tag that commit with `git tag -a -m 'quite X.Y.Z' vX.Y.Z` and push the tag.
+   The next release starts from it.
+
+A `## Unreleased` section at the top holds entries written by hand before
+this script existed. The script replaces its heading with the release's, so
+those entries follow the generated ones in the new section, unchanged.
+
+`changelog.sh` refuses when the tag `vX.Y.Z` exists, when no entry landed since
+the last tag, when `CHANGELOG.md` is untracked or has uncommitted changes or
+when a commit since the tag edited `CHANGELOG.md`, whose entry would be
+written twice. In the last case it lists those commits newest first.
+`--from REV` starts after REV instead of the tag. It skips every commit up to
+and including REV, so their entries must already be in the file. Pass the first
+commit listed.
+
 ## Conventions
 
 - Docstrings wrap at 80 columns.
@@ -194,6 +231,8 @@ Green means **no byte-compile warnings and every spec passes.**
   there. Version-gate hop expectations on `(boundp 'tramp-show-ad-hoc-proxies)`:
   Emacs 28.x keeps an inline hop, 29.2+ drops it unless that option is set.
 - Add a spec with any behavior change.
+- Leave `CHANGELOG.md` alone in a branch. A release writes it (see
+  [Releasing](#releasing)).
 - **Run the negative control on a regression spec:** check it out against the
   OLD code and confirm it fails, and confirm the failure COUNT matches what you
   predicted. Two specs in this suite passed against the very bug they were
